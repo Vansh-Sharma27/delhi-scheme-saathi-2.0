@@ -2,6 +2,10 @@
 
 A voice-first Hindi chatbot that helps Delhi residents discover and apply for government welfare schemes. The bot provides personalized scheme recommendations based on user profiles, document procurement guidance, and rejection prevention tips.
 
+## Provenance
+
+This repository is a fresh import of the hackathon project `delhi-scheme-saathi` at commit `549aec5` (tag `pre-modular-monolith`). The first commit in this repository's history is an unmodified, byte-identical import of that source — verified by comparing git index entries. No prior history was carried over: the 35 commits predating this project remain public at [github.com/Vansh-Sharma27/delhi-scheme-saathi](https://github.com/Vansh-Sharma27/delhi-scheme-saathi).
+
 ## Features
 
 - **Conversational Interface**: Natural Hindi/English/Hinglish conversations via Telegram
@@ -31,7 +35,7 @@ In Telegram, try `/help` first. The bot now also exposes `/start`, `/help`, and 
 ## Project Structure
 
 ```
-delhi-scheme-saathi/
+delhi-scheme-saathi-2.0/
 ├── src/
 │   ├── models/          # Pydantic data models
 │   ├── db/              # Database repositories

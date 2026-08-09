@@ -87,3 +87,6 @@ scripts/generate_pptx.py
 docs/live_text_benchmark_issues_*.md
 docs/live_text_production_issue_audit_*.md
 docs/llm_vs_hardcoded_audit_*.md
+
+# Build artifacts
+*.zip

@@ -1,5 +1,5 @@
 [project]
-name = "delhi-scheme-saathi"
+name = "delhi-scheme-saathi-2-0"
 version = "0.1.0"
 description = "Voice-first Hindi chatbot helping Delhi residents discover and apply for government welfare schemes"
 readme = "README.md"

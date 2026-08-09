@@ -14,8 +14,8 @@ This guide walks you through setting up Delhi Scheme Saathi locally.
 ## Step 1: Clone and Configure
 
 ```bash
-git clone git@github.com:your-org/delhi-scheme-saathi.git
-cd delhi-scheme-saathi
+git clone git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git
+cd delhi-scheme-saathi-2.0
 
 # Copy environment template
 cp .env.example .env
