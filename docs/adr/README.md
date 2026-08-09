@@ -17,3 +17,4 @@ Use [template.md](template.md) for new entries.
 | [0002](0002-redact-credentials-in-logging-layer.md) | Redact credentials in the logging layer, not at call sites | accepted | 2026-07-26 |
 | [0003](0003-webhook-secret-in-secrets-manager.md) | Webhook secret in Secrets Manager, with no CloudFormation default | proposed | 2026-07-26 |
 | [0004](0004-split-conversation-into-package.md) | Split conversation.py into a package with a named-phase pipeline | accepted | 2026-07-26 |
+| [0005](0005-import-baseline-into-new-repository.md) | Import the hackathon baseline into a new repository rather than carrying its history | accepted | 2026-08-09 |
