@@ -1,0 +1,176 @@
+{
+  "scenario_id": "s12_embedding_failure",
+  "turns": [
+    {
+      "response_text": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+      "next_state": "GREETING",
+      "language": "hi",
+      "schemes": [],
+      "inline_keyboard": null,
+      "session_state": "GREETING",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": null,
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "auto",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 1
+    },
+    {
+      "response_text": "What is the applicant/beneficiary age?",
+      "next_state": "PROFILE_COLLECTION",
+      "language": "en",
+      "schemes": [],
+      "inline_keyboard": null,
+      "session_state": "PROFILE_COLLECTION",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": "HOUSING",
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "en",
+      "session_language_locked": false,
+      "session_currently_asking": "age",
+      "session_completed_turn_count": 2
+    },
+    {
+      "response_text": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+      "next_state": "SCHEME_PRESENTATION",
+      "language": "en",
+      "schemes": [
+        {
+          "scheme": {
+            "id": "SCH-GOLD-001",
+            "name": "Delhi Housing Assistance",
+            "name_hindi": "दिल्ली आवास सहायता",
+            "department": "Test Department",
+            "department_hindi": "परीक्षण विभाग",
+            "level": "state",
+            "description": "A test scheme description for verification.",
+            "description_hindi": "सत्यापन के लिए परीक्षण योजना विवरण।",
+            "benefits_summary": null,
+            "benefits_amount": 250000,
+            "benefits_frequency": "one-time",
+            "eligibility": {
+              "min_age": 18,
+              "max_age": null,
+              "genders": [
+                "all"
+              ],
+              "categories": [
+                "EWS",
+                "LIG"
+              ],
+              "caste_categories": [],
+              "income_segments": [
+                "EWS",
+                "LIG"
+              ],
+              "max_income": 300000,
+              "income_by_category": {},
+              "domicile_required": false,
+              "domicile_states": [
+                "all"
+              ],
+              "employment_statuses": [
+                "all"
+              ],
+              "education_levels": [
+                "all"
+              ],
+              "bpl_required": null,
+              "disability_required": null,
+              "disability_min_percentage": null,
+              "other_conditions": [],
+              "special_focus_groups": []
+            },
+            "documents_required": [],
+            "rejection_rules": [],
+            "application_url": "https://example.com/apply",
+            "application_steps": [],
+            "offline_process": "Visit the district office",
+            "processing_time": null,
+            "helpline": null,
+            "life_events": [
+              "HOUSING"
+            ],
+            "tags": [],
+            "official_url": null,
+            "metadata": {},
+            "last_verified": null,
+            "is_active": true
+          },
+          "similarity": 0.8,
+          "eligibility_match": {
+            "age": true,
+            "income": true,
+            "category": true
+          },
+          "deterministic_score": 0.7700000000000001,
+          "ai_relevance_score": 0.7700000000000001,
+          "ai_relevance_reason": null,
+          "topic_match": null
+        }
+      ],
+      "inline_keyboard": [
+        [
+          {
+            "text": "1. Delhi Housing Assistance",
+            "callback_data": "scheme:SCH-GOLD-001"
+          }
+        ]
+      ],
+      "session_state": "SCHEME_PRESENTATION",
+      "session_profile": {
+        "age": 30,
+        "gender": null,
+        "category": "OBC",
+        "annual_income": 200000,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": "HOUSING",
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [
+        {
+          "id": "SCH-GOLD-001",
+          "name": "Delhi Housing Assistance",
+          "name_hindi": "दिल्ली आवास सहायता"
+        }
+      ],
+      "session_language_preference": "en",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 3
+    }
+  ]
+}

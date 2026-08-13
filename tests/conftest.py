@@ -11,6 +11,16 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register custom pytest options."""
+    parser.addoption(
+        "--golden-regenerate",
+        action="store_true",
+        default=False,
+        help="Regenerate golden-master fixtures instead of comparing against them.",
+    )
+
+
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Create event loop for async tests."""

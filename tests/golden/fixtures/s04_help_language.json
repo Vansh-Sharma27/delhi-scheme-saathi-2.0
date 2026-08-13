@@ -1,0 +1,155 @@
+{
+  "scenario_id": "s04_help_language",
+  "turns": [
+    {
+      "response_text": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+      "next_state": "GREETING",
+      "language": "hi",
+      "schemes": [],
+      "inline_keyboard": null,
+      "session_state": "GREETING",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": null,
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "auto",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 1
+    },
+    {
+      "response_text": "Delhi Scheme Saathi Help\n\nENGLISH\nDelhi Scheme Saathi helps you understand which Delhi government welfare schemes may fit your situation.\n\nHow to use it:\n• Start with one simple need\n  Example: \"I need widow pension help\"\n• Answer short questions like age, category, income, gender, or situation\n• Ask follow-up questions about eligibility, benefits, documents, application steps, or why a scheme was suggested\n• If your need changes, just say so and the bot can switch topics\n\nUseful commands and phrases:\n• /help : show this guide again\n• /language : change language\n• /start : begin a fresh search\n• \"start over\" or \"restart\" : reset the chat automatically\n• \"bye\" : end the conversation\n\nCurrent capabilities:\n• Find relevant Delhi welfare schemes\n• Explain scheme details in simple language\n• Share likely eligibility based on the details you provide\n• List documents, application steps, and common rejection warnings\n• Reply in English, Hindi, or Hinglish\n\nImportant:\nThis bot is a guidance tool. Final eligibility and approval depend on official government rules and document verification.\n\nहिंदी\nदिल्ली स्कीम साथी आपकी स्थिति के हिसाब से उपयोगी दिल्ली सरकारी योजनाएं समझने में मदद करता है।\n\nइसे कैसे उपयोग करें:\n• अपनी जरूरत एक सरल वाक्य में बताएं\n  उदाहरण: \"मुझे विधवा पेंशन की जानकारी चाहिए\"\n• अगर पूछा जाए तो उम्र, श्रेणी, आय, लिंग या स्थिति बताएं\n• किसी योजना पर आगे पूछें: पात्रता, लाभ, दस्तावेज, आवेदन प्रक्रिया, या यह योजना क्यों दिखाई गई\n• विषय बदलना हो तो सीधे कहें: अब मुझे किसी और मदद की जरूरत है\n\nउपयोगी कमांड और वाक्य:\n• /help : यह गाइड फिर से देखें\n• /language : भाषा बदलें\n• /start : नई खोज शुरू करें\n• \"start over\" या \"restart\" : चैट अपने-आप रीसेट करें\n• \"bye\" : बातचीत समाप्त करें\n\nअभी यह बॉट क्या कर सकता है:\n• दिल्ली की संबंधित योजनाएं ढूंढना\n• योजना को सरल भाषा में समझाना\n• आपकी दी हुई जानकारी के आधार पर संभावित पात्रता बताना\n• दस्तावेज, आवेदन चरण, और rejection warnings बताना\n• हिंदी, अंग्रेज़ी, और हिंग्लिश में जवाब देना\n\nमहत्वपूर्ण:\nयह मार्गदर्शन के लिए है। अंतिम पात्रता और मंजूरी सरकारी नियमों और दस्तावेज़ सत्यापन पर निर्भर करती है।",
+      "next_state": "GREETING",
+      "language": "en",
+      "schemes": [],
+      "inline_keyboard": [
+        [
+          {
+            "text": "हिंदी",
+            "callback_data": "lang:hi"
+          }
+        ],
+        [
+          {
+            "text": "English",
+            "callback_data": "lang:en"
+          }
+        ],
+        [
+          {
+            "text": "Hinglish",
+            "callback_data": "lang:hinglish"
+          }
+        ]
+      ],
+      "session_state": "GREETING",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": null,
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "auto",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 2
+    },
+    {
+      "response_text": "Choose your preferred language / अपनी पसंदीदा भाषा चुनें.\nYou can switch again anytime with /language.",
+      "next_state": "GREETING",
+      "language": "en",
+      "schemes": [],
+      "inline_keyboard": [
+        [
+          {
+            "text": "हिंदी",
+            "callback_data": "lang:hi"
+          }
+        ],
+        [
+          {
+            "text": "English",
+            "callback_data": "lang:en"
+          }
+        ],
+        [
+          {
+            "text": "Hinglish",
+            "callback_data": "lang:hinglish"
+          }
+        ]
+      ],
+      "session_state": "GREETING",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": null,
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "auto",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 3
+    },
+    {
+      "response_text": "मुझे आपका संदेश समझ नहीं आया। कृपया दोबारा लिखें।",
+      "next_state": "",
+      "language": "hi",
+      "schemes": [],
+      "inline_keyboard": null,
+      "session_state": "GREETING",
+      "session_profile": {
+        "age": null,
+        "gender": null,
+        "category": null,
+        "annual_income": null,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": null,
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [],
+      "session_language_preference": "auto",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_completed_turn_count": 3
+    }
+  ]
+}
