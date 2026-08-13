@@ -61,3 +61,19 @@ ignore = ["E501"]
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+
+[tool.importlinter]
+root_package = "src"
+
+[[tool.importlinter.contracts]]
+name = "Conversation package one-way dependency order (ADR-0004)"
+type = "layers"
+layers = [
+    "src.services.conversation.service",
+    "src.services.conversation.views",
+    "src.services.conversation.turn_policy",
+    "src.services.conversation.intents",
+    "src.services.conversation.scheme_reference",
+    "src.services.conversation.language",
+]
+ignore_unimported_packages = true
