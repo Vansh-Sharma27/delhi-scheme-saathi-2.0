@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "arch/modular-monolith", "arch/phase-*"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest, ruff, mypy, import-linter
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install \
+            pytest==9.1.1 \
+            pytest-asyncio==1.4.0 \
+            pytest-cov==7.1.0 \
+            ruff==0.16.3 \
+            mypy==2.3.1 \
+            types-boto3>=1.0.0 \
+            import-linter==2.13
+
+      - name: Assert executable bits on scripts
+        run: |
+          set -e
+          for script in scripts/rapid_redeploy.sh scripts/seed_local_db.sh scripts/set_telegram_webhook.py scripts/test_conversation_flow.py; do
+            mode=$(git ls-files -s "$script" | cut -d' ' -f1)
+            if [ "$mode" != "100755" ]; then
+              echo "ERROR: $script has mode $mode, expected 100755"
+              exit 1
+            fi
+            echo "OK: $script is executable ($mode)"
+          done
+
+      - name: Run pytest
+        run: pytest -q
+
+      - name: Run ruff
+        run: ruff check .
+
+      - name: Run mypy
+        run: |
+          # Spec 5.6: the gate is "66 or fewer errors", not zero.
+          # Pre-existing errors are a measuring instrument, not a backlog.
+          BASELINE=66
+          ERRORS=$(mypy src 2>&1 | grep -oP 'Found \K\d+(?= error)' | tail -1)
+          echo "mypy: $ERRORS errors (baseline ceiling: $BASELINE)"
+          if [ -z "$ERRORS" ]; then
+            ERRORS=0
+          fi
+          if [ "$ERRORS" -gt "$BASELINE" ]; then
+            echo "FAIL: mypy errors increased ($ERRORS > $BASELINE)"
+            exit 1
+          fi
+
+      - name: Run import-linter
+        run: lint-imports
