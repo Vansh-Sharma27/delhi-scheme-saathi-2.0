@@ -3,10 +3,16 @@
   "turns": [
     {
       "response_text": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "GREETING",
       "language": "hi",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-05",
       "session_state": "GREETING",
       "session_profile": {
         "age": null,
@@ -22,19 +28,54 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [],
       "session_language_preference": "auto",
       "session_language_locked": false,
       "session_currently_asking": null,
-      "session_completed_turn_count": 1
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 1,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [],
+      "llm_timeout_cancelled": false
     },
     {
       "response_text": "What is the applicant/beneficiary age?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "PROFILE_COLLECTION",
       "language": "en",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-05",
       "session_state": "PROFILE_COLLECTION",
       "session_profile": {
         "age": null,
@@ -50,15 +91,66 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": "age",
-      "session_completed_turn_count": 2
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 2,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     },
     {
-      "response_text": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+      "response_text": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n2. 🏠 Delhi Rental Support\n   💰 Benefit: ₹1 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "SCHEME_PRESENTATION",
       "language": "en",
       "schemes": [
@@ -124,14 +216,87 @@
             "last_verified": null,
             "is_active": true
           },
-          "similarity": 0.8,
+          "similarity": 0.9,
           "eligibility_match": {
             "age": true,
             "income": true,
             "category": true
           },
-          "deterministic_score": 0.7700000000000001,
-          "ai_relevance_score": 0.7700000000000001,
+          "deterministic_score": 0.81,
+          "ai_relevance_score": 0.81,
+          "ai_relevance_reason": null,
+          "topic_match": null
+        },
+        {
+          "scheme": {
+            "id": "SCH-GOLD-004",
+            "name": "Delhi Rental Support",
+            "name_hindi": "दिल्ली किराया सहायता",
+            "department": "Test Department",
+            "department_hindi": "परीक्षण विभाग",
+            "level": "state",
+            "description": "A test scheme description for verification.",
+            "description_hindi": "सत्यापन के लिए परीक्षण योजना विवरण।",
+            "benefits_summary": null,
+            "benefits_amount": 100000,
+            "benefits_frequency": "one-time",
+            "eligibility": {
+              "min_age": 18,
+              "max_age": null,
+              "genders": [
+                "all"
+              ],
+              "categories": [
+                "EWS",
+                "LIG"
+              ],
+              "caste_categories": [],
+              "income_segments": [
+                "EWS",
+                "LIG"
+              ],
+              "max_income": 300000,
+              "income_by_category": {},
+              "domicile_required": false,
+              "domicile_states": [
+                "all"
+              ],
+              "employment_statuses": [
+                "all"
+              ],
+              "education_levels": [
+                "all"
+              ],
+              "bpl_required": null,
+              "disability_required": null,
+              "disability_min_percentage": null,
+              "other_conditions": [],
+              "special_focus_groups": []
+            },
+            "documents_required": [],
+            "rejection_rules": [],
+            "application_url": "https://example.com/apply",
+            "application_steps": [],
+            "offline_process": "Visit the district office",
+            "processing_time": null,
+            "helpline": null,
+            "life_events": [
+              "HOUSING"
+            ],
+            "tags": [],
+            "official_url": null,
+            "metadata": {},
+            "last_verified": null,
+            "is_active": true
+          },
+          "similarity": 0.7,
+          "eligibility_match": {
+            "age": true,
+            "income": true,
+            "category": true
+          },
+          "deterministic_score": 0.7,
+          "ai_relevance_score": 0.7,
           "ai_relevance_reason": null,
           "topic_match": null
         }
@@ -142,8 +307,15 @@
             "text": "1. Delhi Housing Assistance",
             "callback_data": "scheme:SCH-GOLD-001"
           }
+        ],
+        [
+          {
+            "text": "2. Delhi Rental Support",
+            "callback_data": "scheme:SCH-GOLD-004"
+          }
         ]
       ],
+      "session_user_id": "golden-05",
       "session_state": "SCHEME_PRESENTATION",
       "session_profile": {
         "age": 30,
@@ -159,25 +331,98 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Age 30, category OBC, income 200000",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n2. 🏠 Delhi Rental Support\n   💰 Benefit: ₹1 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [
         {
           "id": "SCH-GOLD-001",
           "name": "Delhi Housing Assistance",
           "name_hindi": "दिल्ली आवास सहायता"
+        },
+        {
+          "id": "SCH-GOLD-004",
+          "name": "Delhi Rental Support",
+          "name_hindi": "दिल्ली किराया सहायता"
         }
       ],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": null,
-      "session_completed_turn_count": 3
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 3,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        },
+        {
+          "task_type": "judge_scheme_relevance",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     },
     {
-      "response_text": "🏠 Delhi Housing Assistance\n\nA test scheme description for verification.\n\n💰 Benefit: ₹2.5 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+      "response_text": "🏠 Delhi Rental Support\n\nA test scheme description for verification.\n\n💰 Benefit: ₹1 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "SCHEME_DETAILS",
       "language": "en",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-05",
       "session_state": "SCHEME_DETAILS",
       "session_profile": {
         "age": 30,
@@ -193,25 +438,227 @@
         "latitude": null,
         "longitude": null
       },
-      "session_selected_scheme_id": "SCH-GOLD-001",
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Age 30, category OBC, income 200000",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n2. 🏠 Delhi Rental Support\n   💰 Benefit: ₹1 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "2",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🏠 Delhi Rental Support\n\nA test scheme description for verification.\n\n💰 Benefit: ₹1 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [
+        "SCH-GOLD-004"
+      ],
+      "session_selected_scheme_id": "SCH-GOLD-004",
       "session_presented_schemes": [
         {
           "id": "SCH-GOLD-001",
           "name": "Delhi Housing Assistance",
           "name_hindi": "दिल्ली आवास सहायता"
+        },
+        {
+          "id": "SCH-GOLD-004",
+          "name": "Delhi Rental Support",
+          "name_hindi": "दिल्ली किराया सहायता"
         }
       ],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": null,
-      "session_completed_turn_count": 4
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 4,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
+    },
+    {
+      "response_text": "Which scheme would you like to know more about?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
+      "next_state": "SCHEME_PRESENTATION",
+      "language": "en",
+      "schemes": [],
+      "inline_keyboard": null,
+      "session_user_id": "golden-05",
+      "session_state": "SCHEME_PRESENTATION",
+      "session_profile": {
+        "age": 30,
+        "gender": null,
+        "category": "OBC",
+        "annual_income": 200000,
+        "employment_status": null,
+        "marital_status": null,
+        "life_event": "HOUSING",
+        "district": null,
+        "has_bpl_card": null,
+        "disability_percentage": null,
+        "latitude": null,
+        "longitude": null
+      },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Age 30, category OBC, income 200000",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n2. 🏠 Delhi Rental Support\n   💰 Benefit: ₹1 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "2",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🏠 Delhi Rental Support\n\nA test scheme description for verification.\n\n💰 Benefit: ₹1 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "other schemes",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Which scheme would you like to know more about?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [
+        "SCH-GOLD-004"
+      ],
+      "session_selected_scheme_id": null,
+      "session_presented_schemes": [
+        {
+          "id": "SCH-GOLD-001",
+          "name": "Delhi Housing Assistance",
+          "name_hindi": "दिल्ली आवास सहायता"
+        },
+        {
+          "id": "SCH-GOLD-004",
+          "name": "Delhi Rental Support",
+          "name_hindi": "दिल्ली किराया सहायता"
+        }
+      ],
+      "session_language_preference": "en",
+      "session_language_locked": false,
+      "session_currently_asking": null,
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 5,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     },
     {
       "response_text": "🏠 Delhi Housing Assistance\n\nA test scheme description for verification.\n\n💰 Benefit: ₹2.5 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "SCHEME_DETAILS",
       "language": "en",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-05",
       "session_state": "SCHEME_DETAILS",
       "session_profile": {
         "age": 30,
@@ -227,52 +674,112 @@
         "latitude": null,
         "longitude": null
       },
-      "session_selected_scheme_id": "SCH-GOLD-001",
-      "session_presented_schemes": [
+      "session_messages": [
         {
-          "id": "SCH-GOLD-001",
-          "name": "Delhi Housing Assistance",
-          "name_hindi": "दिल्ली आवास सहायता"
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Age 30, category OBC, income 200000",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🎯 Found these schemes for you:\n\n1. 🏠 Delhi Housing Assistance\n   💰 Benefit: ₹2.5 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n2. 🏠 Delhi Rental Support\n   💰 Benefit: ₹1 lakh one-time\n   🏛️ Dept: Test Department\n   ✅ Eligible: Age ✓ • Income ✓ • Category ✓\n\n👆 Tap a button below or type the number.",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "2",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🏠 Delhi Rental Support\n\nA test scheme description for verification.\n\n💰 Benefit: ₹1 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "other schemes",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Which scheme would you like to know more about?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Delhi Housing Assistance",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "🏠 Delhi Housing Assistance\n\nA test scheme description for verification.\n\n💰 Benefit: ₹2.5 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
+          "timestamp": "2026-01-01T12:00:00Z"
         }
       ],
-      "session_language_preference": "en",
-      "session_language_locked": false,
-      "session_currently_asking": null,
-      "session_completed_turn_count": 5
-    },
-    {
-      "response_text": "🏠 Delhi Housing Assistance\n\nA test scheme description for verification.\n\n💰 Benefit: ₹2.5 lakh\n✅ Eligibility: Age: 18-∞ | Max income: ₹3 lakh | Income band: EWS, LIG\n\n🎯 Why this scheme was shown:\n• Age matches: 30\n• Income is within range: ₹2 lakh\n\nWhat would you like next: documents, rejection warnings, or application steps?",
-      "next_state": "SCHEME_DETAILS",
-      "language": "en",
-      "schemes": [],
-      "inline_keyboard": null,
-      "session_state": "SCHEME_DETAILS",
-      "session_profile": {
-        "age": 30,
-        "gender": null,
-        "category": "OBC",
-        "annual_income": 200000,
-        "employment_status": null,
-        "marital_status": null,
-        "life_event": "HOUSING",
-        "district": null,
-        "has_bpl_card": null,
-        "disability_percentage": null,
-        "latitude": null,
-        "longitude": null
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
       },
+      "session_discussed_schemes": [
+        "SCH-GOLD-004",
+        "SCH-GOLD-001"
+      ],
       "session_selected_scheme_id": "SCH-GOLD-001",
       "session_presented_schemes": [
         {
           "id": "SCH-GOLD-001",
           "name": "Delhi Housing Assistance",
           "name_hindi": "दिल्ली आवास सहायता"
+        },
+        {
+          "id": "SCH-GOLD-004",
+          "name": "Delhi Rental Support",
+          "name_hindi": "दिल्ली किराया सहायता"
         }
       ],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": null,
-      "session_completed_turn_count": 6
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 6,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     }
   ]
 }

@@ -11,35 +11,42 @@ permissions:
 
 jobs:
   test:
-    name: pytest, ruff, mypy, import-linter
+    name: pytest, ruff, mypy delta, import-linter, audit
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
         with:
-          python-version: "3.11"
-          cache: pip
+          # The mypy delta gate checks the base revision in a temporary worktree.
+          fetch-depth: 0
 
-      - name: Install dependencies
+      - name: Set up Python 3.11.16
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11.16"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-dev.txt
+
+      - name: Install locked development environment
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install \
-            pytest==9.1.1 \
-            pytest-asyncio==1.4.0 \
-            pytest-cov==7.1.0 \
-            ruff==0.16.3 \
-            mypy==2.3.1 \
-            types-boto3>=1.0.0 \
-            import-linter==2.13
+          python -m pip install -r requirements-dev.txt
+
+      - name: Verify dependency declarations
+        run: python scripts/check_dependency_sync.py
 
       - name: Assert executable bits on scripts
         run: |
-          set -e
-          for script in scripts/rapid_redeploy.sh scripts/seed_local_db.sh scripts/set_telegram_webhook.py scripts/test_conversation_flow.py; do
+          set -euo pipefail
+          for script in \
+            scripts/rapid_redeploy.sh \
+            scripts/seed_local_db.sh \
+            scripts/set_telegram_webhook.py \
+            scripts/test_conversation_flow.py \
+            scripts/check_dependency_sync.py \
+            scripts/check_mypy_delta.py; do
             mode=$(git ls-files -s "$script" | cut -d' ' -f1)
             if [ "$mode" != "100755" ]; then
               echo "ERROR: $script has mode $mode, expected 100755"
@@ -49,25 +56,29 @@ jobs:
           done
 
       - name: Run pytest
-        run: pytest -q
+        env:
+          CI: "true"
+        run: python -m pytest -q
 
       - name: Run ruff
-        run: ruff check .
+        run: python -m ruff check .
 
-      - name: Run mypy
+      - name: Reject new mypy diagnostics
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          # Spec 5.6: the gate is "66 or fewer errors", not zero.
-          # Pre-existing errors are a measuring instrument, not a backlog.
-          BASELINE=66
-          ERRORS=$(mypy src 2>&1 | grep -oP 'Found \K\d+(?= error)' | tail -1)
-          echo "mypy: $ERRORS errors (baseline ceiling: $BASELINE)"
-          if [ -z "$ERRORS" ]; then
-            ERRORS=0
+          set -euo pipefail
+          BASELINE_REF="$EVENT_BASE_SHA"
+          if [ -z "$BASELINE_REF" ] || [[ "$BASELINE_REF" =~ ^0+$ ]]; then
+            BASELINE_REF="HEAD^"
           fi
-          if [ "$ERRORS" -gt "$BASELINE" ]; then
-            echo "FAIL: mypy errors increased ($ERRORS > $BASELINE)"
-            exit 1
-          fi
+          python scripts/check_mypy_delta.py --baseline-ref "$BASELINE_REF"
 
       - name: Run import-linter
         run: lint-imports
+
+      - name: Audit locked production dependencies
+        # Fail instead of occupying a runner indefinitely if the advisory
+        # service is unreachable or throttled.
+        timeout-minutes: 5
+        run: python -m pip_audit --strict -r requirements.lock

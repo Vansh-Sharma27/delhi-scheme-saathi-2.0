@@ -1,36 +1,75 @@
-"""Golden-master transcript harness for the modular-monolith migration.
+"""Deterministic golden-master harness for the conversation pipeline.
 
-Drives ``ConversationService.handle_message`` with all external non-determinism
-stubbed to fixed fixtures, records the full response for fixed turn sequences,
-and compares against committed golden transcripts.
-
-All non-determinism is pinned:
-- LLM analysis, judging, and generation return fixed dicts/strings.
-- Scheme matching returns synthetic ``SchemeMatch`` objects.
-- Scheme detail rendering (DB queries via ``views``) returns fixed data.
-- The clock is frozen so session timestamps are stable.
-- Background memory refresh is disabled so no async work leaks.
-
-Spec reference: ARCHITECTURE_MIGRATION_SPEC_v3.md Section 5.2-5.4.
+The harness drives ``ConversationService.handle_message`` with injected local
+state and fake external providers. Fixtures contain a normalized snapshot of
+all ChatResponse fields, all persisted Session fields, and stable AI telemetry.
 """
 
 from __future__ import annotations
 
+import asyncio
+import difflib
 import json
-from dataclasses import asdict, dataclass, field
+import os
+import re
+import tempfile
+from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-from src.db.session_store import InMemorySessionStore, configure_session_store, get_session_store
-from src.models.api import ChatRequest
+from src.db.session_store import InMemorySessionStore, SessionStore
+from src.models.api import ChatRequest, ChatResponse
 from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
+from src.models.session import Session
+from src.services.ai_orchestrator import (
+    AIExecutionPolicy,
+    AIOrchestrator,
+    AITaskType,
+    LLMUsageEvent,
+)
 from src.services.conversation import ConversationService
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "fixtures"
+GOLDEN_REGENERATE_APPROVAL_ENV = "GOLDEN_REGENERATE_APPROVED"
 
 _FIXED_TIME = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+_TIMEOUT_SECONDS = 0.01
+_SCENARIO_ID_RE = re.compile(r"[a-z0-9_]+")
+_CAPTURED_RESPONSE_FIELDS = {
+    "text",
+    "text_hindi",
+    "audio_url",
+    "schemes",
+    "documents",
+    "rejection_warnings",
+    "offices",
+    "inline_keyboard",
+    "next_state",
+    "language",
+}
+_CAPTURED_SESSION_FIELDS = {
+    "user_id",
+    "state",
+    "user_profile",
+    "messages",
+    "working_memory",
+    "discussed_schemes",
+    "selected_scheme_id",
+    "language_preference",
+    "language_locked",
+    "currently_asking",
+    "skipped_fields",
+    "awaiting_profile_change",
+    "presented_schemes",
+    "completed_turn_count",
+    "last_memory_refresh_turn",
+    "pending_memory_job",
+    "created_at",
+    "updated_at",
+    "metadata",
+}
 
 _DEFAULT_JUDGE_RESULT: dict[str, Any] = {
     "should_clarify": False,
@@ -90,9 +129,7 @@ def _make_match(scheme: Scheme, score: float = 0.8) -> SchemeMatch:
     )
 
 
-# Synthetic scheme catalogue used across scenarios. IDs are deliberately
-# synthetic (SCH-GOLD-*) so they never collide with real seeded data.
-
+# Synthetic catalogue. IDs cannot collide with real seeded data.
 SCHEME_HOUSING = _make_scheme(
     "SCH-GOLD-001",
     name="Delhi Housing Assistance",
@@ -127,6 +164,17 @@ SCHEME_EDUCATION = _make_scheme(
     categories=["SC", "ST", "OBC"],
 )
 
+SCHEME_RENTAL = _make_scheme(
+    "SCH-GOLD-004",
+    name="Delhi Rental Support",
+    name_hindi="दिल्ली किराया सहायता",
+    life_event="HOUSING",
+    benefits_amount=100000,
+    min_age=18,
+    max_income=300000,
+    categories=["EWS", "LIG"],
+)
+
 
 @dataclass
 class TurnSpec:
@@ -146,141 +194,176 @@ class TurnSpec:
 
 @dataclass
 class TurnRecord:
-    """The recorded output of one turn."""
+    """Stable, explicit projection of one response and its persisted session."""
 
     response_text: str
+    response_text_hindi: str | None
+    response_audio_url: str | None
+    response_documents: list[dict[str, Any]]
+    response_rejection_warnings: list[dict[str, Any]]
+    response_offices: list[dict[str, Any]]
     next_state: str
     language: str
-    schemes: list[dict[str, Any]] = field(default_factory=list)
-    inline_keyboard: list[list[dict[str, str]]] | None = None
+    schemes: list[dict[str, Any]]
+    inline_keyboard: list[list[dict[str, str]]] | None
+    session_user_id: str = ""
     session_state: str = ""
     session_profile: dict[str, Any] = field(default_factory=dict)
+    session_messages: list[dict[str, Any]] = field(default_factory=list)
+    session_working_memory: dict[str, Any] = field(default_factory=dict)
+    session_discussed_schemes: list[str] = field(default_factory=list)
     session_selected_scheme_id: str | None = None
     session_presented_schemes: list[dict[str, str]] = field(default_factory=list)
     session_language_preference: str = ""
     session_language_locked: bool = False
     session_currently_asking: str | None = None
+    session_skipped_fields: list[str] = field(default_factory=list)
+    session_awaiting_profile_change: bool = False
     session_completed_turn_count: int = 0
+    session_last_memory_refresh_turn: int = 0
+    session_pending_memory_job: bool = False
+    session_created_at: str | None = None
+    session_updated_at: str | None = None
+    session_metadata: dict[str, Any] = field(default_factory=dict)
+    ai_events: list[dict[str, Any]] = field(default_factory=list)
+    llm_timeout_cancelled: bool = False
 
 
 @dataclass
 class ScenarioResult:
-    """The full recorded transcript for one scenario."""
+    """The normalized transcript for one scenario."""
 
     scenario_id: str
     turns: list[TurnRecord] = field(default_factory=list)
+
+
+def _model_dump(value: Any) -> dict[str, Any]:
+    """Serialize one Pydantic model using JSON-compatible values."""
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return value
+    raise TypeError(f"Cannot serialize {type(value).__name__}")
+
+
+def _event_snapshot(event: LLMUsageEvent) -> dict[str, Any]:
+    """Keep stable telemetry fields; wall-clock latency is intentionally omitted."""
+    return {
+        "task_type": event.task_type,
+        "provider": event.provider,
+        "fallback_used": event.fallback_used,
+        "error": event.error,
+    }
 
 
 async def run_scenario(
     scenario_id: str,
     user_id: str,
     turns: list[TurnSpec],
+    *,
+    session_store: SessionStore | None = None,
 ) -> ScenarioResult:
-    """Drive a multi-turn conversation and record the transcript.
-
-    All external calls are stubbed. The session store is a fresh
-    InMemorySessionStore. The clock is frozen.
-
-    Stubbed non-determinism:
-
-    - ``service.llm.analyze_message``: the LLM turn analysis. Set per turn
-      via ``TurnSpec.llm_analysis``.
-    - ``service.llm.judge_scheme_relevance``: the LLM relevance gate. Set
-      per turn via ``TurnSpec.llm_judge``, defaulting to "no clarification".
-    - ``response_generator.get_ai_orchestrator().generate_response``: the
-      LLM response generation used by language normalization, grounded
-      translation, and scheme-question answering. Returns ``TurnSpec.llm_generate``
-      or empty string.
-    - ``scheme_matcher.match_schemes``: returns ``TurnSpec.match_result``.
-    - ``views.scheme_repo.get_scheme_by_id``: returns
-      ``TurnSpec.scheme_for_details`` or ``None``.
-    - ``views.document_resolver.resolve_documents_for_scheme``: returns ``[]``.
-    - ``views.rejection_engine.get_rejection_warnings``: returns ``[]``.
-    - ``views.office_repo.get_nearest_offices`` and
-      ``get_offices_by_district``: return ``[]`` (used in CSC handoff).
-    - ``enqueue_memory_refresh``: returns ``False`` (no background work).
-    - ``datetime.now`` in ``src.models.session`` and
-      ``src.services.session_manager``: frozen to ``_FIXED_TIME``.
-    """
-    configure_session_store(InMemorySessionStore())
+    """Drive a multi-turn conversation with isolated injected dependencies."""
+    store = session_store or InMemorySessionStore()
     result = ScenarioResult(scenario_id=scenario_id)
+    usage_events: list[LLMUsageEvent] = []
 
-    service = ConversationService(db_pool=AsyncMock())
+    fake_llm = AsyncMock()
+    orchestrator = AIOrchestrator(
+        llm_client=fake_llm,
+        policies={
+            AITaskType.ANALYZE_MESSAGE: AIExecutionPolicy(
+                timeout_seconds=_TIMEOUT_SECONDS,
+                priority="inline",
+            )
+        },
+        usage_sink=usage_events.append,
+    )
+    service = ConversationService(
+        db_pool=AsyncMock(),
+        ai_orchestrator=orchestrator,
+        session_store=store,
+    )
 
-    # Mocks for the DB-layer and integration-layer calls that the
-    # conversation service reaches into.
     get_scheme_mock = AsyncMock(return_value=None)
     docs_mock = AsyncMock(return_value=[])
     rejection_mock = AsyncMock(return_value=[])
     offices_nearest_mock = AsyncMock(return_value=[])
     offices_district_mock = AsyncMock(return_value=[])
 
-    # The response_generator's get_ai_orchestrator is called for language
-    # normalization, grounded translation, and scheme-question answering.
-    # All of those go through orchestrator.generate_response, which we stub
-    # on a fake AsyncMock orchestrator.
     fake_resp_ai = AsyncMock()
     fake_resp_ai.generate_response = AsyncMock(return_value="")
 
-    # Embedding client mock: returns a valid embedding by default, or raises
-    # when TurnSpec.embedding_failure is set (exercising the fallback path
-    # inside the real match_schemes function).
     fake_embedding_client = AsyncMock()
-    fake_embedding_client.get_embedding = AsyncMock(return_value=[0.0] * 512)
-
-    # Hybrid search mock: replaces the DB call inside match_schemes.
-    # Returns synthetic SchemeMatch objects so the post-filter and ranking
-    # in match_schemes run for real.
+    fake_embedding_client.get_embedding = AsyncMock(return_value=[0.0] * 1024)
     fake_hybrid_search = AsyncMock(return_value=[])
 
-    with patch("src.models.session.datetime") as mock_model_dt, patch(
-        "src.services.session_manager.datetime"
-    ) as mock_mgr_dt, patch(
-        "src.services.scheme_matcher.get_embedding_client",
-        return_value=fake_embedding_client,
-    ), patch(
-        "src.services.scheme_matcher.hybrid_search",
-        new=fake_hybrid_search,
-    ), patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
-        new=get_scheme_mock,
-    ), patch(
-        "src.services.conversation.views.document_resolver.resolve_documents_for_scheme",
-        new=docs_mock,
-    ), patch(
-        "src.services.conversation.views.rejection_engine.get_rejection_warnings",
-        new=rejection_mock,
-    ), patch(
-        "src.services.conversation.views.office_repo.get_nearest_offices",
-        new=offices_nearest_mock,
-    ), patch(
-        "src.services.conversation.views.office_repo.get_offices_by_district",
-        new=offices_district_mock,
-    ), patch(
-        "src.services.response_generator.get_ai_orchestrator",
-        return_value=fake_resp_ai,
-    ), patch(
-        "src.services.conversation.service.enqueue_memory_refresh",
-        new=AsyncMock(return_value=False),
+    with (
+        patch("src.models.session.datetime") as mock_model_dt,
+        patch("src.services.session_manager.datetime") as mock_mgr_dt,
+        patch("src.db.session_store.datetime") as mock_store_dt,
+        patch(
+            "src.services.scheme_matcher.get_embedding_client",
+            return_value=fake_embedding_client,
+        ),
+        patch("src.services.scheme_matcher.hybrid_search", new=fake_hybrid_search),
+        patch(
+            "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+            new=get_scheme_mock,
+        ),
+        patch(
+            "src.services.conversation.views.document_resolver.resolve_documents_for_scheme",
+            new=docs_mock,
+        ),
+        patch(
+            "src.services.conversation.views.rejection_engine.get_rejection_warnings",
+            new=rejection_mock,
+        ),
+        patch(
+            "src.services.conversation.views.office_repo.get_nearest_offices",
+            new=offices_nearest_mock,
+        ),
+        patch(
+            "src.services.conversation.views.office_repo.get_offices_by_district",
+            new=offices_district_mock,
+        ),
+        patch(
+            "src.services.response_generator.get_ai_orchestrator",
+            return_value=fake_resp_ai,
+        ),
+        patch(
+            "src.services.conversation.service.enqueue_memory_refresh",
+            new=AsyncMock(return_value=False),
+        ),
     ):
-        mock_model_dt.now.return_value = _FIXED_TIME
-        mock_mgr_dt.now.return_value = _FIXED_TIME
+        for mock_dt in (mock_model_dt, mock_mgr_dt, mock_store_dt):
+            mock_dt.now.return_value = _FIXED_TIME
 
         for turn_spec in turns:
-            # LLM analysis: the orchestrator's analyze_message checks for
-            # an instance override on llm_client.__dict__. Setting it on
-            # service.llm (which IS llm_client) makes the override fire.
+            events_start = len(usage_events)
+            timeout_cancelled = False
+
             if turn_spec.llm_timeout:
-                # Simulate timeout: the override raises TimeoutError,
-                # triggering the safe-output fallback in _run_task.
-                async def _timeout_override(**_kw: Any) -> Any:
-                    raise TimeoutError
-                service.llm.analyze_message = _timeout_override
+
+                async def _slow_override(
+                    _turn_spec: TurnSpec = turn_spec,
+                    **_kw: Any,
+                ) -> Any:
+                    nonlocal timeout_cancelled
+                    try:
+                        await asyncio.sleep(_TIMEOUT_SECONDS * 10)
+                    except asyncio.CancelledError:
+                        timeout_cancelled = True
+                        raise
+                    return _turn_spec.llm_analysis
+
+                fake_llm.analyze_message = _slow_override
             else:
-                service.llm.analyze_message = AsyncMock(
+                fake_llm.analyze_message = AsyncMock(
                     return_value=turn_spec.llm_analysis
                 )
-            service.llm.judge_scheme_relevance = AsyncMock(
+
+            fake_llm.judge_scheme_relevance = AsyncMock(
                 return_value=(
                     turn_spec.llm_judge
                     if turn_spec.llm_judge is not None
@@ -288,61 +371,71 @@ async def run_scenario(
                 )
             )
 
-            # Matching: set hybrid_search return value per turn. The real
-            # match_schemes function runs, exercising the embedding
-            # failure path and post-filter for real.
             fake_hybrid_search.return_value = turn_spec.match_result
-
-            # Embedding failure: make get_embedding raise so match_schemes
-            # catches it and sets query_embedding=None, exercising the
-            # SQL-only fallback ordering path (spec 11.1, 10.4).
             if turn_spec.embedding_failure:
                 fake_embedding_client.get_embedding = AsyncMock(
                     side_effect=RuntimeError("embedding provider unavailable"),
                 )
             else:
                 fake_embedding_client.get_embedding = AsyncMock(
-                    return_value=[0.0] * 512,
+                    return_value=[0.0] * 1024,
                 )
 
-            # Scheme detail lookups.
             get_scheme_mock.return_value = turn_spec.scheme_for_details
-
-            # LLM generation for this turn.
             fake_resp_ai.generate_response = AsyncMock(
                 return_value=turn_spec.llm_generate or ""
             )
 
-            chat_request = ChatRequest(
-                user_id=user_id,
-                message=turn_spec.message,
-                message_type=turn_spec.message_type,
-                callback_data=turn_spec.callback_data,
+            response = await service.handle_message(
+                ChatRequest(
+                    user_id=user_id,
+                    message=turn_spec.message,
+                    message_type=turn_spec.message_type,
+                    callback_data=turn_spec.callback_data,
+                )
             )
-            response = await service.handle_message(chat_request)
-
-            store = get_session_store()
             session = await store.get(user_id)
 
             record = TurnRecord(
                 response_text=response.text,
+                response_text_hindi=response.text_hindi,
+                response_audio_url=response.audio_url,
+                response_documents=[_model_dump(item) for item in response.documents],
+                response_rejection_warnings=[
+                    _model_dump(item) for item in response.rejection_warnings
+                ],
+                response_offices=[_model_dump(item) for item in response.offices],
                 next_state=response.next_state or "",
                 language=response.language,
-                schemes=[
-                    s.model_dump() if hasattr(s, "model_dump") else s
-                    for s in (response.schemes or [])
-                ],
+                schemes=[_model_dump(item) for item in response.schemes],
                 inline_keyboard=response.inline_keyboard,
+                ai_events=[
+                    _event_snapshot(event) for event in usage_events[events_start:]
+                ],
+                llm_timeout_cancelled=timeout_cancelled,
             )
             if session is not None:
+                record.session_user_id = session.user_id
                 record.session_state = session.state.value
-                record.session_profile = session.user_profile.model_dump()
+                record.session_profile = session.user_profile.model_dump(mode="json")
+                record.session_messages = [
+                    message.model_dump(mode="json") for message in session.messages
+                ]
+                record.session_working_memory = session.working_memory.model_dump(mode="json")
+                record.session_discussed_schemes = list(session.discussed_schemes)
                 record.session_selected_scheme_id = session.selected_scheme_id
                 record.session_presented_schemes = list(session.presented_schemes)
                 record.session_language_preference = session.language_preference
                 record.session_language_locked = session.language_locked
                 record.session_currently_asking = session.currently_asking
+                record.session_skipped_fields = list(session.skipped_fields)
+                record.session_awaiting_profile_change = session.awaiting_profile_change
                 record.session_completed_turn_count = session.completed_turn_count
+                record.session_last_memory_refresh_turn = session.last_memory_refresh_turn
+                record.session_pending_memory_job = session.pending_memory_job
+                record.session_created_at = session.created_at.isoformat()
+                record.session_updated_at = session.updated_at.isoformat()
+                record.session_metadata = dict(session.metadata)
 
             result.turns.append(record)
 
@@ -350,63 +443,158 @@ async def run_scenario(
 
 
 def result_to_dict(result: ScenarioResult) -> dict[str, Any]:
-    """Serialize a ScenarioResult to a JSON-compatible dict."""
+    """Serialize a ScenarioResult to a JSON-compatible dictionary."""
     return {
         "scenario_id": result.scenario_id,
-        "turns": [asdict(t) for t in result.turns],
+        "turns": [asdict(turn) for turn in result.turns],
     }
 
 
-def save_fixture(result: ScenarioResult, path: Path | None = None) -> Path:
-    """Write a golden fixture to disk."""
-    if path is None:
-        path = GOLDEN_DIR / f"{result.scenario_id}.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(result_to_dict(result), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+def _fixture_path(scenario_id: str) -> Path:
+    """Return the only allowed fixture path for a validated scenario id."""
+    if _SCENARIO_ID_RE.fullmatch(scenario_id) is None:
+        raise ValueError(f"Invalid golden scenario id: {scenario_id!r}")
+    return GOLDEN_DIR / f"{scenario_id}.json"
+
+
+def validate_fixture(
+    fixture: Any,
+    *,
+    expected_scenario_id: str | None = None,
+) -> list[str]:
+    """Validate exact fixture structure without trusting fixture-controlled keys."""
+    errors: list[str] = []
+    if set(ChatResponse.model_fields) != _CAPTURED_RESPONSE_FIELDS:
+        errors.append("harness: ChatResponse snapshot coverage is stale")
+    if set(Session.model_fields) != _CAPTURED_SESSION_FIELDS:
+        errors.append("harness: Session snapshot coverage is stale")
+    if not isinstance(fixture, dict):
+        return ["fixture: expected an object"]
+
+    expected_top_keys = {"scenario_id", "turns"}
+    actual_top_keys = set(fixture)
+    if actual_top_keys != expected_top_keys:
+        errors.append(
+            "fixture: key mismatch; "
+            f"missing={sorted(expected_top_keys - actual_top_keys)}, "
+            f"unexpected={sorted(actual_top_keys - expected_top_keys)}"
+        )
+
+    scenario_id = fixture.get("scenario_id")
+    if not isinstance(scenario_id, str) or not scenario_id:
+        errors.append("fixture.scenario_id: expected a non-empty string")
+    elif expected_scenario_id is not None and scenario_id != expected_scenario_id:
+        errors.append(
+            f"fixture.scenario_id: expected {expected_scenario_id!r}, got {scenario_id!r}"
+        )
+
+    turns = fixture.get("turns")
+    if not isinstance(turns, list):
+        errors.append("fixture.turns: expected a list")
+        return errors
+    if not turns:
+        errors.append("fixture.turns: expected at least one turn")
+        return errors
+
+    expected_turn_keys = {item.name for item in fields(TurnRecord)}
+    for index, turn in enumerate(turns):
+        if not isinstance(turn, dict):
+            errors.append(f"turn {index}: expected an object")
+            continue
+        actual_turn_keys = set(turn)
+        if actual_turn_keys != expected_turn_keys:
+            errors.append(
+                f"turn {index}: key mismatch; "
+                f"missing={sorted(expected_turn_keys - actual_turn_keys)}, "
+                f"unexpected={sorted(actual_turn_keys - expected_turn_keys)}"
+            )
+    return errors
+
+
+def save_fixture(result: ScenarioResult) -> Path:
+    """Atomically write a validated fixture to its fixed repository location."""
+    path = _fixture_path(result.scenario_id)
+    GOLDEN_DIR.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink():
+        raise ValueError(f"Refusing to overwrite symlink fixture: {path}")
+
+    payload = result_to_dict(result)
+    validation_errors = validate_fixture(
+        payload,
+        expected_scenario_id=result.scenario_id,
     )
+    if validation_errors:
+        raise ValueError("Invalid generated fixture: " + "; ".join(validation_errors))
+
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    fd, temporary_name = tempfile.mkstemp(
+        dir=GOLDEN_DIR,
+        prefix=f".{result.scenario_id}.",
+        suffix=".tmp",
+        text=True,
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as temporary_file:
+            temporary_file.write(serialized)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
     return path
 
 
-def load_fixture(scenario_id: str, path: Path | None = None) -> dict[str, Any]:
-    """Read a golden fixture from disk."""
-    if path is None:
-        path = GOLDEN_DIR / f"{scenario_id}.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+def load_fixture(scenario_id: str) -> dict[str, Any]:
+    """Read a fixture from its fixed repository location."""
+    return json.loads(_fixture_path(scenario_id).read_text(encoding="utf-8"))
+
+
+def format_fixture_diff(actual: ScenarioResult, expected: dict[str, Any]) -> str:
+    """Return a reviewable unified diff for an intentional regeneration."""
+    expected_text = json.dumps(expected, indent=2, ensure_ascii=False, sort_keys=True)
+    actual_text = json.dumps(
+        result_to_dict(actual),
+        indent=2,
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return "\n".join(
+        difflib.unified_diff(
+            expected_text.splitlines(),
+            actual_text.splitlines(),
+            fromfile="committed fixture",
+            tofile="generated fixture",
+            lineterm="",
+        )
+    )
 
 
 def compare_results(
     actual: ScenarioResult,
     expected: dict[str, Any],
 ) -> list[str]:
-    """Compare actual result against expected fixture. Returns list of diffs."""
-    diffs: list[str] = []
+    """Compare exact fixture and result schemas, then compare every value."""
+    diffs = validate_fixture(expected, expected_scenario_id=actual.scenario_id)
+    if diffs:
+        return diffs
+
     actual_dict = result_to_dict(actual)
-
-    if actual_dict["scenario_id"] != expected["scenario_id"]:
-        diffs.append(
-            f"scenario_id: expected {expected['scenario_id']!r}, "
-            f"got {actual_dict['scenario_id']!r}"
-        )
-
     actual_turns = actual_dict["turns"]
     expected_turns = expected["turns"]
     if len(actual_turns) != len(expected_turns):
-        diffs.append(
+        return [
             f"turn count: expected {len(expected_turns)}, got {len(actual_turns)}"
-        )
-        return diffs
+        ]
 
-    for i, (a, e) in enumerate(zip(actual_turns, expected_turns, strict=False)):
-        prefix = f"turn {i}"
-        for key in e:
-            if key not in a:
-                diffs.append(f"{prefix}: missing key {key!r}")
-                continue
-            if a[key] != e[key]:
+    for index, (actual_turn, expected_turn) in enumerate(
+        zip(actual_turns, expected_turns, strict=True)
+    ):
+        for key in sorted(actual_turn):
+            if actual_turn[key] != expected_turn[key]:
                 diffs.append(
-                    f"{prefix}.{key}: expected {json.dumps(e[key], ensure_ascii=False)!r}, "
-                    f"got {json.dumps(a[key], ensure_ascii=False)!r}"
+                    f"turn {index}.{key}: "
+                    f"expected {json.dumps(expected_turn[key], ensure_ascii=False)!r}, "
+                    f"got {json.dumps(actual_turn[key], ensure_ascii=False)!r}"
                 )
     return diffs

@@ -17,8 +17,25 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--golden-regenerate",
         action="store_true",
         default=False,
-        help="Regenerate golden-master fixtures instead of comparing against them.",
+        help=(
+            "Regenerate golden-master fixtures after setting "
+            "GOLDEN_REGENERATE_APPROVED=1; always refused when CI is true."
+        ),
     )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Fail closed before any fixture write is possible."""
+    if not config.getoption("--golden-regenerate"):
+        return
+
+    ci_value = os.environ.get("CI", "").strip().lower()
+    if ci_value in {"1", "true", "yes"}:
+        raise pytest.UsageError("Golden fixture regeneration is disabled in CI")
+    if os.environ.get("GOLDEN_REGENERATE_APPROVED") != "1":
+        raise pytest.UsageError(
+            "Set GOLDEN_REGENERATE_APPROVED=1 after reviewing the intended behavior"
+        )
 
 
 @pytest.fixture(scope="session")

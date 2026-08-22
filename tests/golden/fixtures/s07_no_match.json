@@ -3,10 +3,16 @@
   "turns": [
     {
       "response_text": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "GREETING",
       "language": "hi",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-07",
       "session_state": "GREETING",
       "session_profile": {
         "age": null,
@@ -22,19 +28,54 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [],
       "session_language_preference": "auto",
       "session_language_locked": false,
       "session_currently_asking": null,
-      "session_completed_turn_count": 1
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 1,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [],
+      "llm_timeout_cancelled": false
     },
     {
       "response_text": "What is the applicant/beneficiary age?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "PROFILE_COLLECTION",
       "language": "en",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-07",
       "session_state": "PROFILE_COLLECTION",
       "session_profile": {
         "age": null,
@@ -50,19 +91,71 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": "age",
-      "session_completed_turn_count": 2
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": false,
+      "session_completed_turn_count": 2,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     },
     {
       "response_text": "Unfortunately, we don't currently have schemes matching your profile for this category.\n\nYou can:\n• Explore a different area (housing, health, employment, pension)\n• Update your details if something has changed\n• Send /start to begin a fresh search\n\nWhat would you like to do?",
+      "response_text_hindi": null,
+      "response_audio_url": null,
+      "response_documents": [],
+      "response_rejection_warnings": [],
+      "response_offices": [],
       "next_state": "PROFILE_COLLECTION",
       "language": "en",
       "schemes": [],
       "inline_keyboard": null,
+      "session_user_id": "golden-07",
       "session_state": "PROFILE_COLLECTION",
       "session_profile": {
         "age": 30,
@@ -78,12 +171,68 @@
         "latitude": null,
         "longitude": null
       },
+      "session_messages": [
+        {
+          "role": "user",
+          "content": "/start",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "नमस्ते! 🙏 मैं दिल्ली स्कीम साथी हूं।\n\nमैं आपको सरकारी योजनाओं की जानकारी देने में मदद कर सकता हूं:\n• घर खरीदना/बनाना\n• स्वास्थ्य सहायता\n• शिक्षा ऋण\n• पेंशन योजनाएं\n• रोजगार सहायता\n\nआप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "I need housing help",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "What is the applicant/beneficiary age?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "user",
+          "content": "Age 30, OBC, income 200000",
+          "timestamp": "2026-01-01T12:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "content": "Unfortunately, we don't currently have schemes matching your profile for this category.\n\nYou can:\n• Explore a different area (housing, health, employment, pension)\n• Update your details if something has changed\n• Send /start to begin a fresh search\n\nWhat would you like to do?",
+          "timestamp": "2026-01-01T12:00:00Z"
+        }
+      ],
+      "session_working_memory": {
+        "summary": null,
+        "profile_facts": [],
+        "active_scheme_ids": [],
+        "pending_action": null,
+        "last_user_goal": null
+      },
+      "session_discussed_schemes": [],
       "session_selected_scheme_id": null,
       "session_presented_schemes": [],
       "session_language_preference": "en",
       "session_language_locked": false,
       "session_currently_asking": "age",
-      "session_completed_turn_count": 3
+      "session_skipped_fields": [],
+      "session_awaiting_profile_change": true,
+      "session_completed_turn_count": 3,
+      "session_last_memory_refresh_turn": 0,
+      "session_pending_memory_job": false,
+      "session_created_at": "2026-01-01T12:00:00+00:00",
+      "session_updated_at": "2026-01-01T12:00:00+00:00",
+      "session_metadata": {},
+      "ai_events": [
+        {
+          "task_type": "analyze_message",
+          "provider": null,
+          "fallback_used": false,
+          "error": null
+        }
+      ],
+      "llm_timeout_cancelled": false
     }
   ]
 }

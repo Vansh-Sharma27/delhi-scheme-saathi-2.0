@@ -13,6 +13,7 @@ from typing import Any
 
 from tests.golden.harness import (
     SCHEME_HOUSING,
+    SCHEME_RENTAL,
     TurnSpec,
     _make_match,
 )
@@ -243,28 +244,26 @@ SCENARIO_05_ORDINAL_AND_NAME = [
             action="answer_field",
             extracted_fields={"age": 30, "category": "OBC", "annual_income": 200000},
         ),
-        match_result=[_make_match(SCHEME_HOUSING)],
+        match_result=[
+            _make_match(SCHEME_HOUSING, score=0.9),
+            _make_match(SCHEME_RENTAL, score=0.7),
+        ],
     ),
-    # Select by ordinal
+    # Select the second result by ordinal. The LLM intentionally supplies no ID.
     TurnSpec(
-        message="1",
-        llm_analysis=_analysis(
-            selected_scheme_id="SCH-GOLD-001",
-        ),
-        scheme_for_details=SCHEME_HOUSING,
+        message="2",
+        llm_analysis=_analysis(),
+        scheme_for_details=SCHEME_RENTAL,
     ),
-    # Go back to the scheme list
+    # Go back to the persisted multi-scheme list.
     TurnSpec(
         message="other schemes",
         llm_analysis=_analysis(),
-        scheme_for_details=SCHEME_HOUSING,
     ),
-    # Select by name
+    # Select the first result by exact name, again without an LLM-supplied ID.
     TurnSpec(
         message="Delhi Housing Assistance",
-        llm_analysis=_analysis(
-            selected_scheme_id="SCH-GOLD-001",
-        ),
+        llm_analysis=_analysis(),
         scheme_for_details=SCHEME_HOUSING,
     ),
 ]
@@ -355,6 +354,9 @@ SCENARIO_07_NO_MATCH = [
 
 
 # --- Scenario 8: Clarification outcome from the relevance judge ---
+# The first match completes a low-context collection turn. A later, substantive
+# profile update triggers a fresh match with no pending field, so clarification
+# is not suppressed by the low-context guard.
 
 SCENARIO_08_CLARIFICATION = [
     TurnSpec(
@@ -374,7 +376,18 @@ SCENARIO_08_CLARIFICATION = [
             action="answer_field",
             extracted_fields={"age": 30, "category": "OBC", "annual_income": 200000},
         ),
-        match_result=[_make_match(SCHEME_HOUSING, score=0.5)],
+        match_result=[_make_match(SCHEME_HOUSING, score=0.9)],
+    ),
+    TurnSpec(
+        message="I specifically need affordable housing; our annual income changed to 210000",
+        llm_analysis=_analysis(
+            action="answer_field",
+            extracted_fields={"annual_income": 210000},
+        ),
+        match_result=[
+            _make_match(SCHEME_HOUSING, score=0.1),
+            _make_match(SCHEME_RENTAL, score=0.1),
+        ],
         llm_judge=_judge(
             should_clarify=True,
             clarification_question="Do you want housing schemes specifically?",
@@ -397,7 +410,6 @@ SCENARIO_09_DEATH_IN_FAMILY_EMPATHY = [
         message="My husband passed away recently",
         llm_analysis=_analysis(
             action="answer_field",
-            life_event="DEATH_IN_FAMILY",
             extracted_fields={"marital_status": "widowed"},
         ),
     ),
@@ -473,12 +485,10 @@ SCENARIO_11_DETERMINISTIC_OVERRIDE = [
 ]
 
 
-# --- Scenario 12: Embedding failure — vector ranking skipped ---
-# The embedding client raises, so match_schemes catches the exception,
-# sets query_embedding=None, and hybrid_search falls back to
-# benefits_amount DESC ordering (spec 11.1). The bot still presents
-# schemes without crashing. This pins the EMBEDDING_DIM guard and the
-# embedding-exception fallback path (frozen list 10.4).
+# --- Scenario 12: Embedding provider failure does not break conversation ---
+# Focused matcher/repository tests verify dimensions, query_embedding=None,
+# SQL parameters, and fallback ordering. This end-to-end scenario only pins
+# the user-visible resilience contract.
 
 SCENARIO_12_EMBEDDING_FAILURE = [
     TurnSpec(
@@ -504,12 +514,10 @@ SCENARIO_12_EMBEDDING_FAILURE = [
 ]
 
 
-# --- Scenario 13: LLM timeout on orchestrated task (safe-output payload) ---
-# When the LLM analyze_message times out, _run_task catches TimeoutError
-# and returns the safe-output fallback (FallbackLLMClient.
-# _safe_analysis_payload). The bot still responds coherently using the
-# deterministic layers. This pins the timeout/safe-output mechanism (spec
-# 5.4 item 13, frozen list 10.4 safe-output payload shapes).
+# --- Scenario 13: Real deadline cancellation with safe-output payload ---
+# The injected analysis coroutine sleeps past a 10 ms policy deadline. The
+# fixture records both cancellation and ``error=timeout`` telemetry, so an
+# ordinary empty analysis can no longer satisfy this scenario.
 
 SCENARIO_13_LLM_TIMEOUT_SAFE_OUTPUT = [
     TurnSpec(
