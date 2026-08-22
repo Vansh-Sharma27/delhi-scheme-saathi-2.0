@@ -24,6 +24,7 @@ from typing import Any
 import asyncpg
 
 from src.config import get_settings
+from src.db.session_store import SessionStore
 from src.models.api import ChatRequest, ChatResponse
 from src.models.scheme import SchemeMatch
 from src.models.session import ConversationState, Session, UserProfile
@@ -38,7 +39,7 @@ from src.services import (
     session_manager,
 )
 from src.services.ai_background import enqueue_memory_refresh
-from src.services.ai_orchestrator import get_ai_orchestrator
+from src.services.ai_orchestrator import AIOrchestrator, get_ai_orchestrator
 from src.services.conversation import intents, language, scheme_reference, turn_policy, views
 from src.services.conversation_memory import should_refresh_working_memory
 from src.utils.keyboards import (
@@ -114,10 +115,17 @@ class RenderResult:
 class ConversationService:
     """Main conversation orchestrator."""
 
-    def __init__(self, db_pool: asyncpg.Pool):
+    def __init__(
+        self,
+        db_pool: asyncpg.Pool,
+        *,
+        ai_orchestrator: AIOrchestrator | None = None,
+        session_store: SessionStore | None = None,
+    ) -> None:
         self.pool = db_pool
         self.settings = get_settings()
-        self.ai = get_ai_orchestrator()
+        self.ai = ai_orchestrator or get_ai_orchestrator()
+        self.session_store = session_store
         # Keep the raw client reachable for existing tests and narrow mocks.
         self.llm = self.ai.llm_client
 
@@ -127,7 +135,16 @@ class ConversationService:
 
     async def handle_message(self, request: ChatRequest) -> ChatResponse:
         """Handle one incoming user message and return the reply."""
-        session = await session_manager.get_or_create_session(request.user_id)
+        session = await session_manager.get_or_create_session(
+            request.user_id,
+            store=self.session_store,
+        )
+
+        # Telegram callback queries legitimately carry an empty message body;
+        # their payload lives in callback_data. Dispatch them before applying
+        # the text-only empty-message guard.
+        if request.message_type == "callback" and request.callback_data:
+            return await self._handle_callback(session, request.callback_data)
 
         user_message = sanitize_input(request.message)
         if not user_message:
@@ -143,9 +160,6 @@ class ConversationService:
         command = intents.extract_supported_command(user_message)
         if command:
             return await self._handle_command(session, command, user_message)
-
-        if request.message_type == "callback" and request.callback_data:
-            return await self._handle_callback(session, request.callback_data)
 
         analysis = await self._analyze_turn(session, user_message)
         session, lang, language_changed = self._resolve_language(session, analysis)
@@ -303,7 +317,7 @@ class ConversationService:
         )
 
         session = await session_manager.add_message(session, "assistant", response_text)
-        await session_manager.save_session(session)
+        await session_manager.save_session(session, store=self.session_store)
 
         return ChatResponse(
             text=response_text,
@@ -332,7 +346,7 @@ class ConversationService:
         )
 
         session = await session_manager.add_message(session, "assistant", response_text)
-        await session_manager.save_session(session)
+        await session_manager.save_session(session, store=self.session_store)
 
         return ChatResponse(
             text=response_text,
@@ -1112,9 +1126,15 @@ class ConversationService:
     ) -> RenderResult:
         """Show the scheme list, or open the scheme the user just referenced."""
         profile = session.user_profile
-        scheme_id = analysis.resolved_scheme_id or scheme_reference.default_scheme_from_session(
-            session, requested_state
-        )
+        # An explicit back-to-list request must not immediately reopen the
+        # previously selected scheme through the normal context fallback.
+        if requested_state == ConversationState.SCHEME_PRESENTATION:
+            session = session_manager.clear_selection(session)
+            scheme_id = None
+        else:
+            scheme_id = analysis.resolved_scheme_id or scheme_reference.default_scheme_from_session(
+                session, requested_state
+            )
 
         if scheme_id:
             session = session_manager.select_scheme(session, scheme_id)
@@ -1494,7 +1514,7 @@ class ConversationService:
         if refresh_due:
             session = session_manager.set_pending_memory_job(session, True)
 
-        await session_manager.save_session(session)
+        await session_manager.save_session(session, store=self.session_store)
 
         if not refresh_due:
             return session
@@ -1510,7 +1530,7 @@ class ConversationService:
             session.completed_turn_count,
         )
         session = session_manager.set_pending_memory_job(session, False)
-        await session_manager.save_session(session)
+        await session_manager.save_session(session, store=self.session_store)
         return session
 
     async def _build_command_response(

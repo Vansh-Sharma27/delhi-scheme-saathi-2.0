@@ -1,5 +1,6 @@
 """Tests for the AI orchestration and working-memory layer."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,7 +8,12 @@ import pytest
 from src.integrations.llm_client import ProviderExecutionResult
 from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
 from src.models.session import ConversationMemory, Message, Session, UserProfile
-from src.services.ai_orchestrator import AIOrchestrator
+from src.services.ai_orchestrator import (
+    AIExecutionPolicy,
+    AIOrchestrator,
+    AITaskType,
+    LLMUsageEvent,
+)
 
 
 def _make_match(scheme_id: str, deterministic_score: float) -> SchemeMatch:
@@ -106,3 +112,47 @@ def test_should_run_relevance_judge_only_for_ambiguous_matches() -> None:
     assert orchestrator.should_run_relevance_judge(
         [_make_match("SCH-A", 0.84), _make_match("SCH-B", 0.80)]
     ) is True
+
+
+@pytest.mark.asyncio
+async def test_analyze_message_enforces_deadline_cancels_and_records_timeout() -> None:
+    """A real expired deadline must cancel work and emit timeout telemetry."""
+    fake_llm = AsyncMock()
+    cancelled = asyncio.Event()
+    events: list[LLMUsageEvent] = []
+
+    async def slow_analysis(**_kwargs: object) -> dict[str, object]:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return {"intent": "should-not-complete"}
+
+    fake_llm.analyze_message = slow_analysis
+    orchestrator = AIOrchestrator(
+        llm_client=fake_llm,
+        policies={
+            AITaskType.ANALYZE_MESSAGE: AIExecutionPolicy(
+                timeout_seconds=0.01,
+                priority="inline",
+            )
+        },
+        usage_sink=events.append,
+    )
+    session = Session(user_id="timeout-user")
+
+    output = await orchestrator.analyze_message(
+        session=session,
+        user_message="I need housing",
+        conversation_history=[],
+        system_prompt="test",
+        session_language="en",
+    )
+
+    assert cancelled.is_set()
+    assert output["intent"] == "unknown"
+    assert len(events) == 1
+    assert events[0].task_type == AITaskType.ANALYZE_MESSAGE.value
+    assert events[0].error == "timeout"
+    assert events[0].latency_ms == 10.0

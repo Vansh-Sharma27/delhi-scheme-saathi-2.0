@@ -19,10 +19,15 @@ without driving a full turn.
 
 ## Decision
 
-Split the module into `src/services/conversation/` — `language.py`,
-`intents.py`, `scheme_reference.py`, `turn_policy.py`, `views.py` and
-`service.py` — with a strict one-way dependency order in which no module imports
-anything later in the list. `handle_message` became a pipeline of named phases
+Split the module into `src/services/conversation/` with this enforced layer
+order, listed from highest to lowest:
+
+`service → views → turn_policy → intents → scheme_reference → language`
+
+A module may import a layer to its right (lower), but not one to its left
+(higher). The import-linter contract intentionally governs only these six named
+modules; imports to modules outside the set are not covered by this rule.
+`handle_message` became a pipeline of named phases
 (`_analyze_turn`, `_resolve_language`, `_handle_turn_reset`,
 `_apply_profile_updates`, `_decide_next_state`, `_render_state`,
 `_finalize_turn`) passing frozen dataclasses (`TurnAnalysis`, `ProfileUpdate`,
@@ -59,4 +64,4 @@ anything later in the list. `handle_message` became a pipeline of named phases
 - Tests that patch by string target had to be retargeted, since names are now bound in the module that imports them rather than the module that defines them.
 
 ### Risks
-- The layering is a convention, not something the tooling enforces; an import that reaches back up the list would compile fine. Reviewing new imports against the documented order is the only guard.
+- The layer rule covers only the six named conversation modules. Import-linter enforces reverse dependencies within that set, while dependencies to modules outside it still require ordinary review.
