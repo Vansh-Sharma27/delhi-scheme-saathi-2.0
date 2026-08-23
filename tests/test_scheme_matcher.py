@@ -228,3 +228,109 @@ async def test_match_schemes_keeps_valid_multi_life_event_scheme_via_canonical_m
     )
 
     assert [match.scheme.id for match in matches] == ["SCH-DELHI-001"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("dimension", "expects_vector"),
+    [
+        (scheme_matcher.EMBEDDING_DIM - 1, False),
+        (scheme_matcher.EMBEDDING_DIM, True),
+        (scheme_matcher.EMBEDDING_DIM + 1, False),
+    ],
+)
+async def test_match_schemes_forwards_only_exact_dimension_embeddings(
+    monkeypatch: pytest.MonkeyPatch,
+    dimension: int,
+    expects_vector: bool,
+) -> None:
+    """The repository receives a vector only at the configured dimension."""
+    embedding_client = AsyncMock()
+    embedding_client.get_embedding = AsyncMock(return_value=[0.0] * dimension)
+    hybrid_search = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        scheme_matcher,
+        "get_embedding_client",
+        lambda: embedding_client,
+    )
+    monkeypatch.setattr(scheme_matcher, "hybrid_search", hybrid_search)
+
+    await scheme_matcher.match_schemes(
+        pool=AsyncMock(),  # type: ignore[arg-type]
+        profile=UserProfile(life_event="HOUSING"),
+        query_text="housing help",
+    )
+
+    query_embedding = hybrid_search.await_args.kwargs["query_embedding"]
+    assert (query_embedding is not None) is expects_vector
+    if expects_vector:
+        assert len(query_embedding) == scheme_matcher.EMBEDDING_DIM
+
+
+@pytest.mark.asyncio
+async def test_match_schemes_forwards_none_after_embedding_provider_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Provider failure explicitly selects repository SQL fallback mode."""
+    embedding_client = AsyncMock()
+    embedding_client.get_embedding = AsyncMock(
+        side_effect=RuntimeError("provider unavailable")
+    )
+    hybrid_search = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        scheme_matcher,
+        "get_embedding_client",
+        lambda: embedding_client,
+    )
+    monkeypatch.setattr(scheme_matcher, "hybrid_search", hybrid_search)
+
+    await scheme_matcher.match_schemes(
+        pool=AsyncMock(),  # type: ignore[arg-type]
+        profile=UserProfile(life_event="HOUSING"),
+        query_text="housing help",
+        limit=4,
+    )
+
+    assert hybrid_search.await_args.kwargs["query_embedding"] is None
+    assert hybrid_search.await_args.kwargs["limit"] == 12
+
+
+class _AcquireContext:
+    def __init__(self, connection: AsyncMock) -> None:
+        self.connection = connection
+
+    async def __aenter__(self) -> AsyncMock:
+        return self.connection
+
+    async def __aexit__(self, *_args: object) -> None:
+        return None
+
+
+class _CapturingPool:
+    def __init__(self, connection: AsyncMock) -> None:
+        self.connection = connection
+
+    def acquire(self) -> _AcquireContext:
+        return _AcquireContext(self.connection)
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_without_embedding_uses_benefit_fallback_order() -> None:
+    """SQL fallback ordering and parameter positions are pinned directly."""
+    connection = AsyncMock()
+    connection.fetch = AsyncMock(return_value=[])
+    pool = _CapturingPool(connection)
+
+    await scheme_repo.hybrid_search(
+        pool=pool,  # type: ignore[arg-type]
+        life_event=None,
+        profile=UserProfile(age=30, annual_income=200000),
+        query_embedding=None,
+        limit=7,
+    )
+
+    query, *params = connection.fetch.await_args.args
+    assert "0.0 as similarity" in query
+    assert "ORDER BY benefits_amount DESC NULLS LAST" in query
+    assert "::vector" not in query
+    assert params == [30, 200000, 7]

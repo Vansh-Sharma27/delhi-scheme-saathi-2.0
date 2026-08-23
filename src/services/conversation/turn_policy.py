@@ -147,6 +147,17 @@ def should_answer_scheme_question(
         active_scheme_id,
     ):
         return False
+    # Explicit destinations win, except ``request_application``: while an
+    # application view is already open, that action may accompany a substantive
+    # question such as "What is the first application step?".
+    if action in _NON_QUESTION_ACTIONS and action != "request_application":
+        return False
+    if intents.wants_scheme_list_again(text):
+        return False
+    # Canonical view switches such as "how to apply" must be settled before
+    # broad question patterns inspect the word "how".
+    if intents.is_navigation_only_scheme_followup(text):
+        return False
     if (
         current_state in {
             ConversationState.DOCUMENT_GUIDANCE,
@@ -154,16 +165,15 @@ def should_answer_scheme_question(
             ConversationState.APPLICATION_HELP,
         }
         and intents.looks_like_scheme_question(text)
-        and not intents.is_navigation_only_scheme_followup(text)
     ):
         return True
-    if action in _NON_QUESTION_ACTIONS:
-        return False
-    if intents.wants_scheme_list_again(text):
+    if action == "request_application":
         return False
     if intents.matches_any_pattern(text, intents.DOCUMENT_REQUEST_PATTERNS):
         return False
     if intents.matches_any_pattern(text, intents.REJECTION_REQUEST_PATTERNS):
+        return False
+    if intents.matches_any_pattern(text, intents.APPLICATION_REQUEST_PATTERNS):
         return False
     return intents.looks_like_scheme_question(text)
 

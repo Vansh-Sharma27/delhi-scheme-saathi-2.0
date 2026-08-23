@@ -1,14 +1,10 @@
-# Development dependencies
--r requirements.txt
+# Canonical local/CI development environment.
+-r requirements.lock
 
-# Testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
-
-# Linting & Formatting
-ruff>=0.1.0
-mypy>=1.7.0
-
-# Type stubs
-types-boto3>=1.0.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+ruff==0.16.3
+mypy==2.3.1
+import-linter==2.13
+pip-audit==2.7.0

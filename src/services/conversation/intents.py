@@ -188,6 +188,17 @@ _START_OVER_RE = re.compile(
     r"\b(start over|restart|reset|begin again|from scratch|new search)\b|फिर से|शुरू से"
 )
 _APPLY_RE = re.compile(r"\b(apply|application|apply kar|apply kare|अवेदन|आवेदन)\b")
+_APPLICATION_VIEW_REQUEST_RE = re.compile(
+    r"^(?:"
+    r"how\s+(?:do\s+i\s+|can\s+i\s+|should\s+i\s+|to\s+)?apply"
+    r"|(?:show\s+)?(?:the\s+)?application(?:\s+(?:steps?|process|procedure))?"
+    r"|(?:show\s+)?(?:the\s+)?(?:procedure|process)"
+    r"|apply\s+(?:kaise|kese)\s+(?:kare|karu)"
+    r"|(?:kaise|कैसे)\s+(?:apply|आवेदन)\s+(?:kare|करें)"
+    r"|आवेदन(?:\s+(?:प्रक्रिया|कदम))?"
+    r")[\s?!.]*$",
+    re.IGNORECASE,
+)
 _HANDOFF_RE = re.compile(
     r"\b(csc|human help|service center|service centre|nearest center|operator|contact center)\b"
 )
@@ -349,6 +360,11 @@ def is_navigation_only_scheme_followup(text: str) -> bool:
         return False
 
     text_lower = stripped.lower()
+    # Canonical requests such as "how to apply" are view switches even though
+    # they are grammatically questions. Qualifiers (for example, "without an
+    # Aadhaar card") prevent a full match and keep the substantive answer path.
+    if _APPLICATION_VIEW_REQUEST_RE.fullmatch(text_lower):
+        return True
     if any(re.search(pattern, text_lower) for pattern in _ANALYTICAL_QUESTION_PATTERNS):
         return False
 

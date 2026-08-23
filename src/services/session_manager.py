@@ -3,15 +3,19 @@
 import logging
 from datetime import UTC, datetime
 
-from src.db.session_store import get_session_store
+from src.db.session_store import SessionStore, get_session_store
 from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
 
 logger = logging.getLogger(__name__)
 
 
-async def get_or_create_session(user_id: str) -> Session:
-    """Get existing session or create new one."""
-    store = get_session_store()
+async def get_or_create_session(
+    user_id: str,
+    *,
+    store: SessionStore | None = None,
+) -> Session:
+    """Get an existing session or create one in the supplied store."""
+    store = store or get_session_store()
     session = await store.get(user_id)
 
     if session is None:
@@ -28,15 +32,23 @@ async def get_or_create_session(user_id: str) -> Session:
     return session
 
 
-async def save_session(session: Session) -> None:
-    """Save session to store."""
-    store = get_session_store()
+async def save_session(
+    session: Session,
+    *,
+    store: SessionStore | None = None,
+) -> None:
+    """Save a session in the supplied store, or the configured default."""
+    store = store or get_session_store()
     await store.save(session)
 
 
-async def delete_session(user_id: str) -> None:
-    """Delete session."""
-    store = get_session_store()
+async def delete_session(
+    user_id: str,
+    *,
+    store: SessionStore | None = None,
+) -> None:
+    """Delete a session from the supplied store, or the configured default."""
+    store = store or get_session_store()
     await store.delete(user_id)
 
 

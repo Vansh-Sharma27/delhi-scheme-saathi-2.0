@@ -628,7 +628,7 @@ async def test_language_callback_re_renders_active_scheme_in_selected_language()
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-language-callback",
-                message="lang:hi",
+                message="",
                 message_type="callback",
                 callback_data="lang:hi",
             )

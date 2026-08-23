@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from time import perf_counter
@@ -73,9 +73,16 @@ class AIOrchestrator:
     def __init__(
         self,
         llm_client: FallbackLLMClient | None = None,
+        *,
+        policies: Mapping[AITaskType, AIExecutionPolicy] | None = None,
+        usage_sink: Callable[[LLMUsageEvent], None] | None = None,
     ) -> None:
         self.settings = get_settings()
         self.llm_client = llm_client or get_llm_client()
+        self._policies = dict(self._POLICIES)
+        if policies:
+            self._policies.update(policies)
+        self._usage_sink = usage_sink
 
     @staticmethod
     def _estimate_prompt_chars(*parts: object) -> int:
@@ -107,6 +114,8 @@ class AIOrchestrator:
             queue_lag_ms=queue_lag_ms,
             error=result.error,
         )
+        if self._usage_sink is not None:
+            self._usage_sink(event)
         logger.info("llm_usage %s", json.dumps(asdict(event), ensure_ascii=False))
 
     def _get_instance_override(self, method_name: str) -> Callable[..., Any] | None:
@@ -144,7 +153,7 @@ class AIOrchestrator:
         queue_lag_ms: float | None = None,
     ) -> T:
         """Run one orchestrated LLM task under policy controls."""
-        policy = self._POLICIES[task_type]
+        policy = self._policies[task_type]
         try:
             async with asyncio.timeout(policy.timeout_seconds):
                 result = await call(policy.priority)

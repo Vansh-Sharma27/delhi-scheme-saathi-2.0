@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11.16-slim
 
 WORKDIR /app
 
@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt requirements.lock ./
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 # Copy application code and local bootstrap scripts
 COPY src/ ./src/
