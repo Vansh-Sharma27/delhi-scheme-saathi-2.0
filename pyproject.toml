@@ -91,12 +91,46 @@ containers = ["src.dss"]
 #   Domain -> nothing external
 # Phase 1 creates the packages empty and moves nothing; this contract puts the
 # boundary in place so violations are caught when code lands in later phases.
-# The application use-case packages are listed as independent siblings rather
-# than the `application` package itself, because `application.ports` is a
-# descendant of `application` and import-linter forbids a module appearing in
-# two layers that share descendants. `application`, `domain`, `infrastructure`
-# and `interfaces` package roots are intentionally not listed: their `__init__`
-# modules are empty and the leaf packages carry the boundary.
+#
+# Layer membership semantics (verified against import-linter 2.13):
+#  - `domain`, `infrastructure`, and `interfaces` are listed as single layers,
+#    so import-linter pulls ALL their descendants into that one layer. The four
+#    `domain` subpackages are one undifferentiated layer, the six
+#    `infrastructure` subpackages one layer, the two `interfaces` subpackages
+#    one layer. Spec 1.1 constrains cross-layer direction only, so this is
+#    acceptable; siblings within those layers may import each other.
+#  - `application` is NOT listed as a layer. Its three use-case subpackages
+#    (`application.conversation`, `application.matching`, `application.guidance`)
+#    are listed as independent siblings (the `|` separator), so imports between
+#    them are violations. `application.ports` is a separate, lower layer. This
+#    split exists because `application.ports` is a descendant of `application`
+#    and import-linter forbids a module appearing in two layers that share
+#    descendants.
+#  - `observability` and `settings` are independent siblings (`|`), NOT one
+#    layer: `settings` importing `observability`, or the reverse, is a
+#    violation. Phase 6 wiring must preserve the current shape (logging
+#    configured from `settings.log_level` in the entrypoint, not by
+#    `observability` importing `settings` or vice versa; spec 7.7/7.8).
+#
+# Transitive enforcement and the legacy-tree boundary:
+#  - This contract walks downstream through non-layer modules. A `src.dss`
+#    module importing a legacy `src.*` module whose dependency closure re-enters
+#    `src.dss` at a layer STRICTLY ABOVE the importer fails the contract with
+#    the full chain in the message. Today the facade at
+#    `src.models.rejection_rule` -> `src.dss.domain.schemes.rejection_rule`
+#    creates one such re-entry edge, so any importer below `domain` that
+#    touches `src.main` (which imports `src.models.api` -> `src.models.rejection_rule`)
+#    already fails. Each facade added in Phases 2-4 plants a new re-entry edge,
+#    so the net widens each phase.
+#  - The remaining blind spots are `bootstrap` (the top layer, nothing above
+#    it) and the unlisted container root `src.dss.__init__`. Both are empty
+#    until Phase 6. The `forbidden` contract below closes `bootstrap` and the
+#    root against legacy `src.*` imports.
+#  - Phase 6 landmine (spec 7.7): `CHAT_SESSION_PREFIX` moves into
+#    `src/dss/settings.py`. A transient `from src.main import
+#    CHAT_SESSION_PREFIX` inside `src.dss.settings` fails this gate today
+#    (proven). The Phase 6 agent must copy the constant, never import it.
+#
 # Three downward edges remain permitted by this total order but are eliminated
 # by later phases and tightened then: interfaces -> infrastructure (notifier
 # port, Phase 3), application use-cases -> infrastructure (repository ports,
@@ -111,3 +145,18 @@ layers = [
     "observability | settings",
 ]
 ignore_unimported_packages = true
+
+[[tool.importlinter.contracts]]
+name = "No new src.dss code imports legacy src.* wiring (Phase 1 scaffolding)"
+type = "forbidden"
+source_modules = ["src.dss.bootstrap", "src.dss"]
+# `src.**` matches every module under `src` including `src.dss.*`; the
+# contract skips overlapping pairs (a source module is not forbidden from
+# importing itself or its own descendants), so self-imports inside `src.dss`
+# are unaffected. This closes the two blind spots the layers contract leaves:
+# `bootstrap` (top layer, nothing above it to re-enter) and the unlisted
+# container root `src.dss.__init__`. It is green today because both are empty.
+# Indirect imports are checked, so a `bootstrap` module that imports a legacy
+# module which in turn imports `src.dss.*` also fails.
+forbidden_modules = ["src.**"]
+allow_indirect_imports = false
