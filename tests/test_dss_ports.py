@@ -27,9 +27,13 @@ from src.dss.application.ports.llm import (
     TaskPriority,
 )
 from src.dss.application.ports.notifier import Notifier
+from src.dss.application.ports.rejection_rule_repository import (
+    RejectionRuleRepository,
+)
 from src.integrations.embedding_client import FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.telegram import TelegramClient
+from src.models.rejection_rule import RejectionRule
 
 
 class FakeLLMProvider:
@@ -509,3 +513,80 @@ async def test_fake_notifier_exercised_through_port() -> None:
     assert fake.download_returns == ["file-abc"]
     assert len(fake.voice_sends) == 1
     assert len(fake.audio_sends) == 1
+
+
+class InMemoryRejectionRuleRepository:
+    """List-backed rejection rule repository for tests.
+
+    Holds RejectionRule instances and answers the four read methods by
+    filtering in memory. Severity ordering matches the legacy repo's
+    critical/high/warning ordering.
+    """
+
+    _SEVERITY_ORDER = {"critical": 0, "high": 1, "warning": 2}
+
+    def __init__(self, rules: list[RejectionRule] | None = None) -> None:
+        self._rules: list[RejectionRule] = list(rules or [])
+
+    async def get_rules_by_scheme(self, scheme_id: str) -> list[RejectionRule]:
+        hits = [rule for rule in self._rules if rule.scheme_id == scheme_id]
+        return sorted(hits, key=lambda r: self._SEVERITY_ORDER.get(r.severity, 3))
+
+    async def get_rules_by_ids(self, rule_ids: list[str]) -> list[RejectionRule]:
+        if not rule_ids:
+            return []
+        wanted = set(rule_ids)
+        hits = [rule for rule in self._rules if rule.id in wanted]
+        return sorted(hits, key=lambda r: self._SEVERITY_ORDER.get(r.severity, 3))
+
+    async def get_critical_rules(self, scheme_id: str) -> list[RejectionRule]:
+        hits = [
+            rule for rule in self._rules
+            if rule.scheme_id == scheme_id and rule.severity == "critical"
+        ]
+        return hits
+
+    async def get_all_rules(self) -> list[RejectionRule]:
+        return sorted(self._rules, key=lambda r: (r.scheme_id, self._SEVERITY_ORDER.get(r.severity, 3)))
+
+
+def _rejection_rule(seed: str = "RULE-1", scheme_id: str = "SCH-1", severity: str = "high") -> RejectionRule:
+    return RejectionRule(
+        id=seed,
+        scheme_id=scheme_id,
+        rule_type="procedural",
+        description="desc",
+        description_hindi="विवरण",
+        severity=severity,
+        prevention_tip="tip",
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_rejection_rule_repository_exercised_through_port() -> None:
+    """The rejection rule port is implementable and usable: a fake is typed
+    as the port and the four read methods filter correctly."""
+    rules = [
+        _rejection_rule("RULE-1", "SCH-1", "warning"),
+        _rejection_rule("RULE-2", "SCH-1", "critical"),
+        _rejection_rule("RULE-3", "SCH-2", "high"),
+    ]
+    repo: RejectionRuleRepository = InMemoryRejectionRuleRepository(rules)
+
+    by_scheme = await repo.get_rules_by_scheme("SCH-1")
+    assert [rule.id for rule in by_scheme] == ["RULE-2", "RULE-1"]
+
+    by_ids = await repo.get_rules_by_ids(["RULE-3", "RULE-1"])
+    assert {rule.id for rule in by_ids} == {"RULE-3", "RULE-1"}
+
+    critical = await repo.get_critical_rules("SCH-1")
+    assert [rule.id for rule in critical] == ["RULE-2"]
+
+    empty_ids = await repo.get_rules_by_ids([])
+    assert empty_ids == []
+
+    all_rules = await repo.get_all_rules()
+    assert len(all_rules) == 3
+
+    fake = repo
+    assert isinstance(fake, InMemoryRejectionRuleRepository)
