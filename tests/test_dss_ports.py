@@ -20,6 +20,7 @@ import pytest
 
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.embeddings import EmbeddingProvider
+from src.dss.application.ports.idempotency_store import IdempotencyStore
 from src.dss.application.ports.llm import (
     LLMProvider,
     ProviderExecutionResult,
@@ -350,3 +351,40 @@ async def test_fake_clock_exercised_through_port() -> None:
 
     fake = clock
     assert isinstance(fake, FakeClock)
+
+
+class InMemoryIdempotencyStore:
+    """Set-backed atomic claim store for tests.
+
+    A single Python `set` with no await between check and insert is atomic
+    within one event loop, which is enough for the unit tests that exercise
+    the port. A production adapter needs a real conditional-write backend;
+    this fake does not model cross-process races.
+    """
+
+    def __init__(self) -> None:
+        self._seen: set[int] = set()
+        self.claim_calls: int = 0
+
+    async def claim(self, update_id: int) -> bool:
+        self.claim_calls += 1
+        if update_id in self._seen:
+            return False
+        self._seen.add(update_id)
+        return True
+
+
+@pytest.mark.asyncio
+async def test_in_memory_idempotency_store_exercised_through_port() -> None:
+    """The idempotency port is implementable and usable: a fake is typed as
+    the port and the first-seen semantics hold across repeats."""
+    store: IdempotencyStore = InMemoryIdempotencyStore()
+
+    assert await store.claim(123456) is True
+    assert await store.claim(123456) is False
+    assert await store.claim(123457) is True
+    assert await store.claim(123456) is False
+
+    fake = store
+    assert isinstance(fake, InMemoryIdempotencyStore)
+    assert fake.claim_calls == 4
