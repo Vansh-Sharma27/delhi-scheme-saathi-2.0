@@ -1,42 +1,13 @@
-"""Rejection rule data model."""
+"""Rejection rule data model.
 
-from datetime import datetime
-from typing import Any
+Facade: the implementation moved to
+``src.dss.domain.schemes.rejection_rule`` in Phase 1 as the facade-pattern
+proof (spec 2.1, Phase 1). This module re-exports it so existing imports
+``from src.models.rejection_rule import RejectionRule`` keep working while the
+migration proceeds. The facade is removed in Phase 6 once every consumer
+imports the new path.
+"""
 
-from pydantic import BaseModel, Field
+from src.dss.domain.schemes.rejection_rule import RejectionRule
 
-
-class RejectionRule(BaseModel, frozen=True):
-    """Rejection rule for a scheme (immutable)."""
-
-    id: str
-    scheme_id: str
-    rule_type: str  # validity, procedural, compliance, timeline, authority
-    description: str
-    description_hindi: str
-    severity: str  # critical, high, warning
-    prevention_tip: str
-    examples: list[str] = Field(default_factory=list)
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-    @classmethod
-    def from_db_row(cls, row: Any) -> "RejectionRule":
-        """Create from database row (asyncpg Record)."""
-        return cls(
-            id=row["id"],
-            scheme_id=row["scheme_id"],
-            rule_type=row["rule_type"],
-            description=row["description"],
-            description_hindi=row["description_hindi"],
-            severity=row["severity"],
-            prevention_tip=row["prevention_tip"],
-            examples=list(row.get("examples") or []),
-            created_at=row.get("created_at"),
-            updated_at=row.get("updated_at"),
-        )
-
-    @property
-    def severity_order(self) -> int:
-        """Numeric severity for sorting (lower = more severe)."""
-        return {"critical": 0, "high": 1, "warning": 2}.get(self.severity, 3)
+__all__ = ["RejectionRule"]
