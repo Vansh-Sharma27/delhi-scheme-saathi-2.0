@@ -13,10 +13,12 @@ environment. The in-memory implementations that need no settings
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
+from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.llm import (
     LLMProvider,
@@ -308,3 +310,43 @@ async def test_fake_embedding_provider_exercised_through_port() -> None:
     assert isinstance(fake, FakeEmbeddingProvider)
     assert fake.get_calls == 2
     assert fake.batch_calls == 2
+
+
+class FakeClock:
+    """Fixed clock for deterministic time-dependent tests.
+
+    Returns the same UTC datetime for every call unless advanced via
+    ``tick``. This is the seam the spec Phase 3 caution names: once a clock
+    is injected into the session helpers, TTL and memory-refresh logic can
+    be pinned without freezing wall time globally.
+    """
+
+    def __init__(self, fixed: datetime | None = None) -> None:
+        self._fixed = fixed or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+    def now(self) -> datetime:
+        return self._fixed
+
+    def tick(self, to: datetime) -> None:
+        """Advance the fixed time for tests that cover ordering over time."""
+        self._fixed = to
+
+
+@pytest.mark.asyncio
+async def test_fake_clock_exercised_through_port() -> None:
+    """The clock port is implementable and usable: a fake is typed as the
+    port and returns a stable UTC datetime across reads, then advances."""
+    clock: Clock = FakeClock()
+
+    first = clock.now()
+    again = clock.now()
+    assert first == again
+    assert first.tzinfo == UTC
+
+    clock.tick(datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC))
+    later = clock.now()
+    assert later > first
+    assert later.day == 2
+
+    fake = clock
+    assert isinstance(fake, FakeClock)
