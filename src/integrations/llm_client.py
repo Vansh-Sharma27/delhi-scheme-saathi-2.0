@@ -4,70 +4,23 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Generic, Literal, Protocol, TypeVar
+from typing import Any, TypeVar
 
 from src.config import get_settings
+from src.dss.application.ports.llm import (
+    LLMProvider as LLMProvider,
+)
+from src.dss.application.ports.llm import (
+    ProviderExecutionResult as ProviderExecutionResult,
+)
+from src.dss.application.ports.llm import (
+    TaskPriority as TaskPriority,
+)
 
 logger = logging.getLogger(__name__)
 
-TaskPriority = Literal["inline", "background"]
 T = TypeVar("T")
-
-
-class LLMProvider(Protocol):
-    """Protocol for LLM providers."""
-
-    async def analyze_message(
-        self,
-        user_message: str,
-        conversation_history: list[dict[str, str]],
-        current_state: str,
-        user_profile: dict[str, Any],
-        system_prompt: str,
-        session_language: str = "hi",
-        working_memory: dict[str, Any] | None = None,
-        priority: TaskPriority = "inline",
-    ) -> dict[str, Any]: ...
-
-    async def generate_response(
-        self,
-        context: dict[str, Any],
-        system_prompt: str,
-        user_language: str,
-        priority: TaskPriority = "inline",
-    ) -> str: ...
-
-    async def summarize_conversation(
-        self,
-        messages: list[dict[str, str]],
-        current_summary: str | None,
-        priority: TaskPriority = "background",
-    ) -> str: ...
-
-    async def judge_scheme_relevance(
-        self,
-        user_message: str,
-        conversation_history: list[dict[str, str]],
-        current_state: str,
-        user_profile: dict[str, Any],
-        candidate_schemes: list[dict[str, Any]],
-        session_language: str = "hi",
-        working_memory: dict[str, Any] | None = None,
-        priority: TaskPriority = "inline",
-    ) -> dict[str, Any]: ...
-
-
-@dataclass(frozen=True, slots=True)
-class ProviderExecutionResult(Generic[T]):
-    """Result of a provider execution with metadata for observability."""
-
-    output: T
-    provider: str | None
-    fallback_used: bool
-    latency_ms: float
-    error: str | None = None
 
 
 class FallbackLLMClient:
