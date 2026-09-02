@@ -17,11 +17,13 @@ from typing import Any
 
 import pytest
 
+from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.llm import (
     LLMProvider,
     ProviderExecutionResult,
     TaskPriority,
 )
+from src.integrations.embedding_client import FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 
 
@@ -242,3 +244,67 @@ async def test_fake_llm_provider_exercised_through_port() -> None:
     assert len(fake.generate_calls) == 2
     assert len(fake.summarize_calls) == 2
     assert len(fake.judge_calls) == 2
+
+
+class FakeEmbeddingProvider:
+    """Deterministic embedding provider backed by a fixed vector map.
+
+    Returns a stored 3-dimensional vector per text, ``None`` for unknown text,
+    and an empty batch for an empty input list. Mirrors the contract an
+    adapter must satisfy so the matching layer can skip vector ranking on a
+    missing embedding (spec 10.4 frozen list).
+    """
+
+    def __init__(self) -> None:
+        self._vectors: dict[str, list[float]] = {
+            "आवास": [1.0, 0.0, 0.0],
+            "housing": [0.9, 0.1, 0.0],
+        }
+        self.get_calls: int = 0
+        self.batch_calls: int = 0
+
+    async def get_embedding(self, text: str) -> list[float] | None:
+        self.get_calls += 1
+        return self._vectors.get(text)
+
+    async def get_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
+        self.batch_calls += 1
+        if not texts:
+            return []
+        return [self._vectors.get(text, [0.0, 0.0, 0.0]) for text in texts]
+
+
+def _fallback_embedding_client_satisfies_port(
+    client: FallbackEmbeddingClient,
+) -> EmbeddingProvider:
+    """Static assertion: FallbackEmbeddingClient conforms to the port.
+
+    mypy verifies this at type-check time; the function is never called.
+    """
+    return client
+
+
+@pytest.mark.asyncio
+async def test_fake_embedding_provider_exercised_through_port() -> None:
+    """The embedding port is implementable and usable: a fake is typed as the
+    port and both methods are called through the port type."""
+    provider: EmbeddingProvider = FakeEmbeddingProvider()
+
+    housing = await provider.get_embedding("आवास")
+    assert housing == [1.0, 0.0, 0.0]
+
+    missing = await provider.get_embedding("unknown text")
+    assert missing is None
+
+    batch = await provider.get_embeddings_batch(["आवास", "housing", "unknown"])
+    assert batch[0] == [1.0, 0.0, 0.0]
+    assert batch[1] == [0.9, 0.1, 0.0]
+    assert batch[2] == [0.0, 0.0, 0.0]
+
+    empty = await provider.get_embeddings_batch([])
+    assert empty == []
+
+    fake = provider
+    assert isinstance(fake, FakeEmbeddingProvider)
+    assert fake.get_calls == 2
+    assert fake.batch_calls == 2
