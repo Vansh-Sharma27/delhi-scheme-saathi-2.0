@@ -26,8 +26,10 @@ from src.dss.application.ports.llm import (
     ProviderExecutionResult,
     TaskPriority,
 )
+from src.dss.application.ports.notifier import Notifier
 from src.integrations.embedding_client import FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
+from src.integrations.telegram import TelegramClient
 
 
 class FakeLLMProvider:
@@ -388,3 +390,122 @@ async def test_in_memory_idempotency_store_exercised_through_port() -> None:
     fake = store
     assert isinstance(fake, InMemoryIdempotencyStore)
     assert fake.claim_calls == 4
+
+
+class FakeNotifier:
+    """Recording notifier that captures every outbound message.
+
+    Stores text sends, inline keyboards, callback answers, chat actions,
+    and voice or audio sends in order, plus the bytes returned for a voice
+    download. Used to assert the conversation layer replies through the port
+    without hitting the Telegram API.
+    """
+
+    def __init__(self, voice_bytes: bytes = b"audio") -> None:
+        self.texts: list[tuple[int | str, str]] = []
+        self.keyboards: list[dict[str, Any]] = []
+        self.callback_answers: list[str] = []
+        self.chat_actions: list[tuple[int | str, str]] = []
+        self.voice_sends: list[dict[str, Any]] = []
+        self.audio_sends: list[dict[str, Any]] = []
+        self.download_returns: list[str] = []
+        self._voice_bytes = voice_bytes
+
+    async def send_text(
+        self,
+        chat_id: int | str,
+        text: str,
+        parse_mode: str | None = None,
+    ) -> dict[str, Any]:
+        self.texts.append((chat_id, text))
+        return {"ok": True, "result": {}}
+
+    async def send_inline_keyboard(
+        self,
+        chat_id: int | str,
+        text: str,
+        buttons: list[list[dict[str, str]]],
+        parse_mode: str | None = None,
+    ) -> dict[str, Any]:
+        self.keyboards.append({"chat_id": chat_id, "text": text, "buttons": buttons})
+        return {"ok": True, "result": {}}
+
+    async def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        show_alert: bool = False,
+    ) -> dict[str, Any]:
+        self.callback_answers.append(callback_query_id)
+        return {"ok": True, "result": True}
+
+    async def send_chat_action(
+        self,
+        chat_id: int | str,
+        action: str = "typing",
+    ) -> dict[str, Any]:
+        self.chat_actions.append((chat_id, action))
+        return {"ok": True, "result": True}
+
+    async def send_voice(
+        self,
+        chat_id: int | str,
+        voice_data: bytes | str,
+        caption: str | None = None,
+        filename: str = "response.ogg",
+        content_type: str = "audio/ogg",
+    ) -> dict[str, Any]:
+        self.voice_sends.append({"chat_id": chat_id, "filename": filename, "content_type": content_type})
+        return {"ok": True, "result": {}}
+
+    async def send_audio(
+        self,
+        chat_id: int | str,
+        audio_bytes: bytes,
+        filename: str = "response.ogg",
+        caption: str | None = None,
+        content_type: str = "audio/ogg",
+    ) -> dict[str, Any]:
+        self.audio_sends.append({"chat_id": chat_id, "filename": filename, "content_type": content_type})
+        return {"ok": True, "result": {}}
+
+    async def download_voice(self, file_id: str) -> bytes:
+        self.download_returns.append(file_id)
+        return self._voice_bytes
+
+
+def _telegram_client_satisfies_notifier_port(client: TelegramClient) -> Notifier:
+    """Static assertion: TelegramClient conforms to the Notifier port.
+
+    mypy verifies this at type-check time; the function is never called
+    because TelegramClient needs live settings to construct.
+    """
+    return client
+
+
+@pytest.mark.asyncio
+async def test_fake_notifier_exercised_through_port() -> None:
+    """The notifier port is implementable and usable: a fake is typed as the
+    port and the full send plus download surface is called through it."""
+    notifier: Notifier = FakeNotifier(voice_bytes=b"voice-bytes")
+
+    await notifier.send_chat_action(123, "typing")
+    await notifier.answer_callback_query("cb-1")
+    await notifier.send_text(123, "नमस्ते")
+    await notifier.send_inline_keyboard(
+        chat_id=123, text="चुनें", buttons=[[{"text": "विकल्प 1", "callback_data": "1"}]]
+    )
+    voice = await notifier.download_voice("file-abc")
+    assert voice == b"voice-bytes"
+    await notifier.send_voice(123, b"audio-bytes", filename="reply.ogg", content_type="audio/ogg")
+    await notifier.send_audio(123, b"audio-bytes", filename="reply.ogg", content_type="audio/ogg")
+
+    fake = notifier
+    assert isinstance(fake, FakeNotifier)
+    assert fake.chat_actions == [(123, "typing")]
+    assert fake.callback_answers == ["cb-1"]
+    assert fake.texts == [(123, "नमस्ते")]
+    assert len(fake.keyboards) == 1
+    assert fake.download_returns == ["file-abc"]
+    assert len(fake.voice_sends) == 1
+    assert len(fake.audio_sends) == 1
