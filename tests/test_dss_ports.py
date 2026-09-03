@@ -47,6 +47,7 @@ from src.dss.application.ports.notifier import Notifier
 from src.dss.application.ports.rejection_rule_repository import (
     RejectionRuleRepository,
 )
+from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.application.ports.session_repository import SessionStore
 from src.dss.application.ports.work_queue import (
     AIWorkItem,
@@ -529,3 +530,100 @@ async def test_in_memory_rejection_rule_repository_conforms_and_orders_by_severi
 
     assert await repo.get_rules_by_ids([]) == []
     assert len(await repo.get_all_rules()) == 3
+
+
+class InMemorySchemeRepository:
+    """List-backed scheme repository. When no embedding is passed to
+    `hybrid_search`, the legacy repo falls back to ordering by
+    `benefits_amount DESC` (spec 11.1); the fake mirrors that fallback so
+    Phase 3 tests of the matching layer can pin it."""
+
+    def __init__(self, schemes: list[Any] | None = None) -> None:
+        self._schemes: list[Any] = list(schemes or [])
+
+    async def get_scheme_by_id(self, scheme_id: str) -> Any:
+        return next((s for s in self._schemes if s.id == scheme_id), None)
+
+    async def get_schemes_by_life_event(self, life_event: str, limit: int = 10) -> list[Any]:
+        hits = [s for s in self._schemes if life_event in s.life_events]
+        return sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)[:limit]
+
+    async def get_all_schemes(self, active_only: bool = True) -> list[Any]:
+        hits = self._schemes if not active_only else [s for s in self._schemes if s.is_active]
+        return sorted(hits, key=lambda s: s.name)
+
+    async def hybrid_search(
+        self,
+        life_event: str | None,
+        profile: Any,
+        query_embedding: list[float] | None = None,
+        limit: int = 5,
+    ) -> list[Any]:
+        from src.models.scheme import SchemeMatch
+
+        hits = self._schemes if life_event is None else [
+            s for s in self._schemes if life_event in s.life_events
+        ]
+        ordered = sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)
+        return [SchemeMatch(scheme=s, similarity=0.0) for s in ordered[:limit]]
+
+    async def search_schemes_by_text(self, search_text: str, limit: int = 10) -> list[Any]:
+        needle = search_text.lower()
+        hits = [
+            s for s in self._schemes
+            if needle in s.name.lower() or needle in s.description.lower()
+        ]
+        return sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)[:limit]
+
+    async def get_scheme_debug_rows(self, scheme_ids: list[str]) -> list[dict[str, Any]]:
+        wanted = set(scheme_ids)
+        return [
+            {"id": s.id, "name": s.name, "life_events": list(s.life_events)}
+            for s in self._schemes if s.id in wanted
+        ]
+
+
+def _scheme(
+    sid: str, name: str, benefits_amount: int | None, life_events: list[str], active: bool = True
+) -> Any:
+    from src.models.scheme import Scheme
+
+    return Scheme(
+        id=sid, name=name, name_hindi=name, department="d", department_hindi="ड",
+        level="state", description="desc", description_hindi="वि",
+        benefits_amount=benefits_amount, life_events=life_events, is_active=active,
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benefit() -> None:
+    """InMemorySchemeRepository conforms to SchemeRepository. The asserted
+    invariant is the spec 11.1 fallback: when no embedding is passed,
+    `hybrid_search` orders candidates by `benefits_amount DESC`. That is the
+    degradation path the matching layer silently takes on any embedding
+    failure, so a port fake that does not reproduce it would mislead Phase 3
+    tests. `get_scheme_by_id` returning None for a miss is also asserted
+    because the views layer branches on it."""
+    repo: SchemeRepository = InMemorySchemeRepository([
+        _scheme("S1", "Small Benefit", 1000, ["HOUSING"]),
+        _scheme("S2", "Large Benefit", 50000, ["HOUSING"]),
+        _scheme("S3", "No Amount", None, ["HOUSING"]),
+        _scheme("S4", "Other Event", 2000, ["HEALTH_CRISIS"]),
+    ])
+    assert isinstance(repo, SchemeRepository)
+
+    by_id = await repo.get_scheme_by_id("S1")
+    assert by_id is not None and by_id.id == "S1"
+    assert await repo.get_scheme_by_id("missing") is None
+
+    matches = await repo.hybrid_search("HOUSING", profile=None, query_embedding=None)
+    assert [m.scheme.id for m in matches] == ["S2", "S1", "S3"]
+
+    by_event = await repo.get_schemes_by_life_event("HOUSING")
+    assert [s.id for s in by_event] == ["S2", "S1", "S3"]
+
+    active = await repo.get_all_schemes(active_only=True)
+    assert {s.id for s in active} == {"S1", "S2", "S3", "S4"}
+
+    rows = await repo.get_scheme_debug_rows(["S1", "S4"])
+    assert {r["id"] for r in rows} == {"S1", "S4"}
