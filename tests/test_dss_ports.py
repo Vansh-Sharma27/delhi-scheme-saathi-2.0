@@ -36,6 +36,7 @@ import pytest
 from src.config import get_settings
 from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.dss.application.ports.clock import Clock
+from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.idempotency_store import IdempotencyStore
 from src.dss.application.ports.llm import (
@@ -627,3 +628,83 @@ async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benef
 
     rows = await repo.get_scheme_debug_rows(["S1", "S4"])
     assert {r["id"] for r in rows} == {"S1", "S4"}
+
+
+class InMemoryDocumentRepository:
+    """List-backed document repository. `get_documents_for_scheme` takes a
+    scheme id, not a scheme object, because the legacy repo reads the
+    scheme's `documents_required` array from the schemes table; the fake
+    keeps a side map of scheme id to required document ids to mirror that."""
+
+    def __init__(
+        self,
+        documents: list[Any] | None = None,
+        scheme_docs: dict[str, list[str]] | None = None,
+    ) -> None:
+        self._docs: list[Any] = list(documents or [])
+        self._scheme_docs: dict[str, list[str]] = dict(scheme_docs or {})
+
+    async def get_document_by_id(self, doc_id: str) -> Any:
+        return next((d for d in self._docs if d.id == doc_id), None)
+
+    async def get_documents_by_ids(self, doc_ids: list[str]) -> list[Any]:
+        if not doc_ids:
+            return []
+        wanted = set(doc_ids)
+        return [d for d in self._docs if d.id in wanted]
+
+    async def get_all_documents(self) -> list[Any]:
+        return sorted(self._docs, key=lambda d: d.name)
+
+    async def get_documents_for_scheme(self, scheme_id: str) -> list[Any]:
+        required = self._scheme_docs.get(scheme_id, [])
+        wanted = set(required)
+        return [d for d in self._docs if d.id in wanted]
+
+    async def search_documents(self, query: str, limit: int = 10) -> list[Any]:
+        needle = query.lower()
+        hits = [d for d in self._docs if needle in d.name.lower() or needle in d.name_hindi.lower()]
+        return sorted(hits, key=lambda d: d.name)[:limit]
+
+
+def _document(doc_id: str, name: str, name_hindi: str = "ड") -> Any:
+    from src.models.document import Document
+
+    return Document(
+        id=doc_id, name=name, name_hindi=name_hindi, issuing_authority="UIDAI",
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_document_repository_conforms_and_resolves_scheme_docs() -> None:
+    """InMemoryDocumentRepository conforms to DocumentRepository. The
+    asserted invariant is `get_documents_for_scheme` resolving the scheme's
+    required-documents list to Document objects, which is the path the
+    guidance layer uses to show what to bring. `get_document_by_id` returning
+    None for a miss is asserted because the document-detail endpoint
+    branches on it. `get_documents_by_ids([])` returning an empty list is
+    asserted because the legacy repo guards it explicitly."""
+    repo: DocumentRepository = InMemoryDocumentRepository(
+        documents=[
+            _document("DOC-1", "Aadhaar"),
+            _document("DOC-2", "Income Certificate", "आय प्रमाण पत्र"),
+            _document("DOC-3", "Death Certificate"),
+        ],
+        scheme_docs={"SCH-1": ["DOC-1", "DOC-2"]},
+    )
+    assert isinstance(repo, DocumentRepository)
+
+    assert (await repo.get_document_by_id("DOC-1")).id == "DOC-1"
+    assert await repo.get_document_by_id("missing") is None
+
+    by_ids = await repo.get_documents_by_ids(["DOC-3", "DOC-1"])
+    assert {d.id for d in by_ids} == {"DOC-1", "DOC-3"}
+    assert await repo.get_documents_by_ids([]) == []
+
+    scheme_docs = await repo.get_documents_for_scheme("SCH-1")
+    assert {d.id for d in scheme_docs} == {"DOC-1", "DOC-2"}
+    assert await repo.get_documents_for_scheme("SCH-2") == []
+
+    assert len(await repo.get_all_documents()) == 3
+    hits = await repo.search_documents("income")
+    assert [d.id for d in hits] == ["DOC-2"]
