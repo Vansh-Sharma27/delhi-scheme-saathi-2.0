@@ -51,13 +51,20 @@ from src.dss.application.ports.rejection_rule_repository import (
 )
 from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.application.ports.session_repository import SessionStore
+from src.dss.application.ports.speech import (
+    SpeechProvider,
+    STTResult,
+    TTSResult,
+)
 from src.dss.application.ports.work_queue import (
     AIWorkItem,
     AIWorkQueue,
     AIWorkType,
 )
+from src.integrations.bhashini import BhashiniClient
 from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
+from src.integrations.sarvam import SarvamClient
 from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule
 from src.models.session import Session
@@ -788,3 +795,63 @@ async def test_in_memory_office_repository_conforms_and_filters_by_service() -> 
     assert {o.id for o in by_district} == {"OFF-1", "OFF-3"}
 
     assert len(await repo.get_all_offices()) == 3
+
+
+def test_speech_port_conformance() -> None:
+    """Both speech adapters expose the SpeechProvider methods. issubclass
+    needs no construction, so neither SarvamClient nor BhashiniClient needs
+    live settings."""
+    assert issubclass(SarvamClient, SpeechProvider)
+    assert issubclass(BhashiniClient, SpeechProvider)
+
+
+class FakeSpeechProvider:
+    """Deterministic speech provider. Returns a fixed transcript and a
+    fixed audio payload. Used to exercise the webhook handler's voice path
+    through the port without hitting Sarvam or Bhashini."""
+
+    def __init__(self) -> None:
+        self.stt_calls: int = 0
+        self.tts_calls: int = 0
+
+    async def speech_to_text(
+        self,
+        audio_bytes: bytes,
+        source_lang: str = "hi",
+        audio_format: str = "ogg",
+    ) -> STTResult:
+        self.stt_calls += 1
+        return STTResult(text="मुझे आवास चाहिए", confidence=0.9, language=source_lang)
+
+    async def text_to_speech(
+        self,
+        text: str,
+        target_lang: str = "hi",
+        voice: str = "female",
+    ) -> TTSResult:
+        self.tts_calls += 1
+        return TTSResult(audio_bytes=b"audio-bytes", content_type="audio/ogg")
+
+
+@pytest.mark.asyncio
+async def test_fake_speech_provider_conforms_and_round_trips() -> None:
+    """FakeSpeechProvider conforms to SpeechProvider. The asserted invariant
+    is the result-type identity: the fake returns the port's canonical
+    STTResult and TTSResult (the same class both legacy adapters now
+    re-export), so isinstance checks in test_webhook and test_sarvam keep
+    working against one class."""
+    provider: SpeechProvider = FakeSpeechProvider()
+    assert isinstance(provider, SpeechProvider)
+
+    stt = await provider.speech_to_text(b"audio", source_lang="hi")
+    assert isinstance(stt, STTResult)
+    assert stt.language == "hi"
+
+    tts = await provider.text_to_speech("नमस्ते")
+    assert isinstance(tts, TTSResult)
+    assert tts.audio_bytes == b"audio-bytes"
+
+    fake = provider
+    assert isinstance(fake, FakeSpeechProvider)
+    assert fake.stt_calls == 1
+    assert fake.tts_calls == 1
