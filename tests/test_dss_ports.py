@@ -45,6 +45,7 @@ from src.dss.application.ports.llm import (
     TaskPriority,
 )
 from src.dss.application.ports.notifier import Notifier
+from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import (
     RejectionRuleRepository,
 )
@@ -708,3 +709,82 @@ async def test_in_memory_document_repository_conforms_and_resolves_scheme_docs()
     assert len(await repo.get_all_documents()) == 3
     hits = await repo.search_documents("income")
     assert [d.id for d in hits] == ["DOC-2"]
+
+
+class InMemoryOfficeRepository:
+    """List-backed office repository. `get_offices_by_service` filters by a
+    document id appearing in the office's `services` list, which is the
+    filter the guidance layer uses to find where to procure a document."""
+
+    def __init__(self, offices: list[Any] | None = None) -> None:
+        self._offices: list[Any] = list(offices or [])
+
+    async def get_office_by_id(self, office_id: str) -> Any:
+        return next((o for o in self._offices if o.id == office_id), None)
+
+    async def get_offices_by_district(self, district: str, limit: int = 10) -> list[Any]:
+        hits = [o for o in self._offices if district.lower() in o.district.lower()]
+        return sorted(hits, key=lambda o: (o.type, o.name))[:limit]
+
+    async def get_nearest_offices(
+        self,
+        latitude: float,
+        longitude: float,
+        limit: int = 5,
+        office_type: str | None = None,
+    ) -> list[Any]:
+        hits = self._offices if office_type is None else [o for o in self._offices if o.type == office_type]
+        return sorted(hits, key=lambda o: o.name)[:limit]
+
+    async def get_offices_by_service(
+        self,
+        document_id: str,
+        district: str | None = None,
+        limit: int = 10,
+    ) -> list[Any]:
+        hits = [o for o in self._offices if document_id in o.services]
+        if district:
+            hits = [o for o in hits if district.lower() in o.district.lower()]
+        return sorted(hits, key=lambda o: (o.type, o.name))[:limit]
+
+    async def get_all_offices(self) -> list[Any]:
+        return sorted(self._offices, key=lambda o: (o.district, o.name))
+
+
+def _office(oid: str, district: str, services: list[str], otype: str = "CSC") -> Any:
+    from src.models.office import Office
+
+    return Office(
+        id=oid, name=oid, type=otype, address="addr", district=district, services=services,
+    )
+
+
+@pytest.mark.asyncio
+async def test_in_memory_office_repository_conforms_and_filters_by_service() -> None:
+    """InMemoryOfficeRepository conforms to OfficeRepository. The asserted
+    invariant is `get_offices_by_service` filtering by a document id in the
+    office's `services` list, which is the path the guidance layer uses to
+    find where to procure a document. The district narrowing on the same
+    call is asserted because the endpoint takes both. `get_office_by_id`
+    returning None for a miss is asserted because the office view branches
+    on it."""
+    repo: OfficeRepository = InMemoryOfficeRepository([
+        _office("OFF-1", "North Delhi", ["DOC-1", "DOC-2"]),
+        _office("OFF-2", "South Delhi", ["DOC-2"]),
+        _office("OFF-3", "North Delhi", ["DOC-3"]),
+    ])
+    assert isinstance(repo, OfficeRepository)
+
+    assert (await repo.get_office_by_id("OFF-1")).id == "OFF-1"
+    assert await repo.get_office_by_id("missing") is None
+
+    by_service = await repo.get_offices_by_service("DOC-2")
+    assert {o.id for o in by_service} == {"OFF-1", "OFF-2"}
+
+    by_service_north = await repo.get_offices_by_service("DOC-2", district="North")
+    assert [o.id for o in by_service_north] == ["OFF-1"]
+
+    by_district = await repo.get_offices_by_district("North")
+    assert {o.id for o in by_district} == {"OFF-1", "OFF-3"}
+
+    assert len(await repo.get_all_offices()) == 3
