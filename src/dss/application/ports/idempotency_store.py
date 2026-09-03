@@ -18,9 +18,10 @@ during the migration); this port exists because spec 6.1 requires it.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class IdempotencyStore(Protocol):
     """Atomic first-seen claim keyed by an integer update id."""
 

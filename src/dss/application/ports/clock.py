@@ -14,9 +14,10 @@ The port returns a timezone-aware datetime. An adapter wrapping
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 
+@runtime_checkable
 class Clock(Protocol):
     """Provider of the current UTC time."""
 

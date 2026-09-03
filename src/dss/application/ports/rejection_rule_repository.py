@@ -19,11 +19,12 @@ rules and Phase 3 should not lose them.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from src.dss.domain.schemes.rejection_rule import RejectionRule
 
 
+@runtime_checkable
 class RejectionRuleRepository(Protocol):
     """Read access to rejection rules keyed by scheme."""
 

@@ -1,14 +1,29 @@
 ﻿"""Phase 2 port conformance and in-memory fakes.
 
-Each application port in ``src.dss.application.ports`` must have at least one
-in-memory fake exercised by a test (spec Phase 2 gate), and each existing
-concrete adapter that the port is the future home for is asserted to satisfy
-the port. Concrete adapters that need live settings (FallbackLLMClient,
-FallbackEmbeddingClient, SarvamClient, BhashiniClient, TelegramClient,
-DynamoDBSessionStore, SQSAIWorkQueue) are checked with a static
-conformance function rather than constructed, so this file runs with no
-environment. The in-memory implementations that need no settings
-(InMemorySessionStore, InMemoryAIWorkQueue) are constructed and exercised.
+Two things are verified per port (spec Phase 2 gate):
+
+1. Existing concrete adapters that the port is the future home for still
+   expose every port method. Checked with `issubclass(RealAdapter, Port)`
+   under `@runtime_checkable`. This catches a renamed or removed method on
+   the adapter during the migration. It does NOT catch signature drift (a
+   changed parameter): `runtime_checkable` checks method presence only.
+   Signature drift is caught in Phase 3, when callers redirect through the
+   port and `mypy src` checks the call sites.
+
+2. An in-memory fake conforms to the port and is awaitable. The fake is the
+   test seam Phase 3+ reuses, so proving it conforms and its methods do not
+   raise on await is the point. Behavioral asserts are kept only where the
+   fake encodes a real invariant the production adapter will share
+   (idempotency first-seen, rejection-rule severity order, clock tick); for
+   pure recorder fakes (LLM, embeddings, notifier) only conformance and
+   awaitability are asserted, because asserting the fake's own hardcoded
+   return values would be circular.
+
+Concrete adapters that need live settings to construct (FallbackLLMClient,
+FallbackEmbeddingClient, TelegramClient, DynamoDBSessionStore,
+SQSAIWorkQueue) are checked with `issubclass`, which needs no instance.
+InMemorySessionStore and InMemoryAIWorkQueue need no settings and are
+exercised directly through their ports.
 """
 
 from __future__ import annotations
@@ -18,6 +33,7 @@ from typing import Any
 
 import pytest
 
+from src.config import get_settings
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.idempotency_store import IdempotencyStore
@@ -30,42 +46,67 @@ from src.dss.application.ports.notifier import Notifier
 from src.dss.application.ports.rejection_rule_repository import (
     RejectionRuleRepository,
 )
-from src.integrations.embedding_client import FallbackEmbeddingClient
+from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule
+from src.services.ai_orchestrator import AIOrchestrator, AITaskType
+from src.services.scheme_relevance import (
+    CLARIFY_CONFIDENCE_THRESHOLD,
+    PRESENT_CONFIDENCE_THRESHOLD,
+)
+
+
+def test_llm_port_conformance() -> None:
+    """FallbackLLMClient exposes every LLMProvider method. Catches a rename
+    or removal on the production adapter; does not catch signature drift."""
+    assert issubclass(FallbackLLMClient, LLMProvider)
+
+
+def test_frozen_constants_sentinel() -> None:
+    """Pins the five frozen values the PR #2 review (F3/N3) found silently
+    mutable: the two relevance thresholds, the two relevance-skipping config
+    defaults, the orchestrator's per-task policies, and EMBEDDING_DIM. A
+    change to any of them must be a deliberate, reviewed act, not a silent
+    drift; this test makes the change visible by failing the suite."""
+    assert PRESENT_CONFIDENCE_THRESHOLD == 0.6
+    assert CLARIFY_CONFIDENCE_THRESHOLD == 0.45
+    settings = get_settings()
+    assert settings.ai_relevance_min_deterministic_score == 0.85
+    assert settings.ai_relevance_score_gap_threshold == 0.15
+    policies = AIOrchestrator._POLICIES
+    assert policies[AITaskType.ANALYZE_MESSAGE].timeout_seconds == 8.0
+    assert policies[AITaskType.ANALYZE_MESSAGE].priority == "inline"
+    assert policies[AITaskType.JUDGE_SCHEME_RELEVANCE].timeout_seconds == 3.0
+    assert policies[AITaskType.JUDGE_SCHEME_RELEVANCE].priority == "inline"
+    assert policies[AITaskType.GENERATE_RESPONSE].timeout_seconds == 8.0
+    assert policies[AITaskType.GENERATE_RESPONSE].priority == "inline"
+    assert policies[AITaskType.REFRESH_WORKING_MEMORY].timeout_seconds == 20.0
+    assert policies[AITaskType.REFRESH_WORKING_MEMORY].priority == "background"
+    assert EMBEDDING_DIM == 1024
+
+
+def test_embedding_port_conformance() -> None:
+    """FallbackEmbeddingClient exposes every EmbeddingProvider method."""
+    assert issubclass(FallbackEmbeddingClient, EmbeddingProvider)
+
+
+def test_notifier_port_conformance() -> None:
+    """TelegramClient exposes every Notifier method (no construction; the
+    client needs live settings)."""
+    assert issubclass(TelegramClient, Notifier)
 
 
 class FakeLLMProvider:
-    """Deterministic LLM provider for tests.
-
-    Records every call and returns canned payloads sized so the four task
-    types (analyze, generate, summarize, judge) and their ``*_with_meta``
-    variants are all exercised through the port.
-    """
+    """Deterministic LLM provider. Returns canned payloads sized for the four
+    task types and their `*_with_meta` variants. Pure recorder: Phase 3
+    tests assert behaviour through it, so Phase 2 only proves conformance
+    and awaitability."""
 
     def __init__(self) -> None:
-        self.analyze_calls: list[dict[str, Any]] = []
-        self.generate_calls: list[dict[str, Any]] = []
-        self.summarize_calls: list[dict[str, Any]] = []
-        self.judge_calls: list[dict[str, Any]] = []
-        self._analysis: dict[str, Any] = {
-            "intent": "unknown",
-            "life_event": None,
-            "extracted_fields": {},
-            "language": "hi",
-            "selected_scheme_id": None,
-            "action": None,
-            "needs_clarification": False,
-            "clarification_question": None,
-            "response_text": None,
-        }
-        self._relevance: dict[str, Any] = {
-            "should_clarify": False,
-            "clarification_question": None,
-            "overall_confidence": 0.5,
-            "candidate_scores": [],
-        }
+        self.calls: int = 0
+        self._analysis: dict[str, Any] = {"intent": "unknown", "language": "hi"}
+        self._relevance: dict[str, Any] = {"overall_confidence": 0.5, "candidate_scores": []}
 
     async def analyze_message(
         self,
@@ -78,7 +119,7 @@ class FakeLLMProvider:
         working_memory: dict[str, Any] | None = None,
         priority: TaskPriority = "inline",
     ) -> dict[str, Any]:
-        self.analyze_calls.append({"user_message": user_message, "priority": priority})
+        self.calls += 1
         return dict(self._analysis)
 
     async def analyze_message_with_meta(
@@ -92,17 +133,8 @@ class FakeLLMProvider:
         working_memory: dict[str, Any] | None = None,
         priority: TaskPriority = "inline",
     ) -> ProviderExecutionResult[dict[str, Any]]:
-        payload = await self.analyze_message(
-            user_message=user_message,
-            conversation_history=conversation_history,
-            current_state=current_state,
-            user_profile=user_profile,
-            system_prompt=system_prompt,
-            session_language=session_language,
-            working_memory=working_memory,
-            priority=priority,
-        )
-        return ProviderExecutionResult(output=payload, provider="fake", fallback_used=False, latency_ms=1.0)
+        self.calls += 1
+        return ProviderExecutionResult(output=dict(self._analysis), provider="fake", fallback_used=False, latency_ms=1.0)
 
     async def generate_response(
         self,
@@ -111,8 +143,8 @@ class FakeLLMProvider:
         user_language: str = "hi",
         priority: TaskPriority = "inline",
     ) -> str:
-        self.generate_calls.append({"user_language": user_language, "priority": priority})
-        return "à¤¨à¤®à¤¸à¥à¤¤à¥‡"
+        self.calls += 1
+        return "नमस्ते"
 
     async def generate_response_with_meta(
         self,
@@ -121,10 +153,8 @@ class FakeLLMProvider:
         user_language: str = "hi",
         priority: TaskPriority = "inline",
     ) -> ProviderExecutionResult[str]:
-        text = await self.generate_response(
-            context=context, system_prompt=system_prompt, user_language=user_language, priority=priority
-        )
-        return ProviderExecutionResult(output=text, provider="fake", fallback_used=False, latency_ms=1.0)
+        self.calls += 1
+        return ProviderExecutionResult(output="नमस्ते", provider="fake", fallback_used=False, latency_ms=1.0)
 
     async def summarize_conversation(
         self,
@@ -132,7 +162,7 @@ class FakeLLMProvider:
         current_summary: str | None = None,
         priority: TaskPriority = "background",
     ) -> str:
-        self.summarize_calls.append({"priority": priority})
+        self.calls += 1
         return current_summary or ""
 
     async def summarize_conversation_with_meta(
@@ -141,10 +171,8 @@ class FakeLLMProvider:
         current_summary: str | None = None,
         priority: TaskPriority = "background",
     ) -> ProviderExecutionResult[str]:
-        summary = await self.summarize_conversation(
-            messages=messages, current_summary=current_summary, priority=priority
-        )
-        return ProviderExecutionResult(output=summary, provider="fake", fallback_used=False, latency_ms=1.0)
+        self.calls += 1
+        return ProviderExecutionResult(output=current_summary or "", provider="fake", fallback_used=False, latency_ms=1.0)
 
     async def judge_scheme_relevance(
         self,
@@ -157,7 +185,7 @@ class FakeLLMProvider:
         working_memory: dict[str, Any] | None = None,
         priority: TaskPriority = "inline",
     ) -> dict[str, Any]:
-        self.judge_calls.append({"user_message": user_message, "priority": priority})
+        self.calls += 1
         return dict(self._relevance)
 
     async def judge_scheme_relevance_with_meta(
@@ -171,162 +199,63 @@ class FakeLLMProvider:
         working_memory: dict[str, Any] | None = None,
         priority: TaskPriority = "inline",
     ) -> ProviderExecutionResult[dict[str, Any]]:
-        payload = await self.judge_scheme_relevance(
-            user_message=user_message,
-            conversation_history=conversation_history,
-            current_state=current_state,
-            user_profile=user_profile,
-            candidate_schemes=candidate_schemes,
-            session_language=session_language,
-            working_memory=working_memory,
-            priority=priority,
-        )
-        return ProviderExecutionResult(output=payload, provider="fake", fallback_used=False, latency_ms=1.0)
-
-
-def _fallback_llm_client_satisfies_llm_port(client: FallbackLLMClient) -> LLMProvider:
-    """Static assertion: FallbackLLMClient conforms to the LLMProvider port.
-
-    mypy verifies this at type-check time; the function is never called.
-    """
-    return client
+        self.calls += 1
+        return ProviderExecutionResult(output=dict(self._relevance), provider="fake", fallback_used=False, latency_ms=1.0)
 
 
 @pytest.mark.asyncio
-async def test_fake_llm_provider_exercised_through_port() -> None:
-    """The LLM port is implementable and usable: a fake is typed as the port
-    and every method is called through the port type."""
+async def test_fake_llm_provider_conforms_and_is_awaitable() -> None:
+    """FakeLLMProvider conforms to LLMProvider and every method (including
+    the four *_with_meta variants) is awaitable and returns the port-declared
+    type. Return values are not asserted: they are canned data the fake owns."""
     provider: LLMProvider = FakeLLMProvider()
+    assert isinstance(provider, LLMProvider)
 
-    analysis = await provider.analyze_message(
-        user_message="à¤®à¥à¤à¥‡ à¤†à¤µà¤¾à¤¸ à¤šà¤¾à¤¹à¤¿à¤",
-        conversation_history=[],
-        current_state="GREETING",
-        user_profile={},
-        system_prompt="",
-    )
-    assert analysis["intent"] == "unknown"
-
-    meta = await provider.analyze_message_with_meta(
-        user_message="à¤®à¥à¤à¥‡ à¤†à¤µà¤¾à¤¸ à¤šà¤¾à¤¹à¤¿à¤",
-        conversation_history=[],
-        current_state="GREETING",
-        user_profile={},
-        system_prompt="",
-    )
-    assert meta.provider == "fake"
-    assert meta.output["intent"] == "unknown"
-
-    text = await provider.generate_response(context={}, system_prompt="", user_language="hi")
-    assert text == "à¤¨à¤®à¤¸à¥à¤¤à¥‡"
-
-    gen_meta = await provider.generate_response_with_meta(context={}, system_prompt="")
-    assert gen_meta.output == "à¤¨à¤®à¤¸à¥à¤¤à¥‡"
-
-    summary = await provider.summarize_conversation(messages=[], current_summary=None)
-    assert summary == ""
-
-    sum_meta = await provider.summarize_conversation_with_meta(messages=[])
-    assert sum_meta.output == ""
-
-    relevance = await provider.judge_scheme_relevance(
-        user_message="à¤†à¤µà¤¾à¤¸",
-        conversation_history=[],
-        current_state="SCHEME_MATCHING",
-        user_profile={},
-        candidate_schemes=[],
-    )
-    assert relevance["overall_confidence"] == 0.5
-
-    judge_meta = await provider.judge_scheme_relevance_with_meta(
-        user_message="à¤†à¤µà¤¾à¤¸",
-        conversation_history=[],
-        current_state="SCHEME_MATCHING",
-        user_profile={},
-        candidate_schemes=[],
-    )
-    assert judge_meta.provider == "fake"
-
-    fake = provider
-    assert isinstance(fake, FakeLLMProvider)
-    assert len(fake.analyze_calls) == 2
-    assert len(fake.generate_calls) == 2
-    assert len(fake.summarize_calls) == 2
-    assert len(fake.judge_calls) == 2
+    assert isinstance(await provider.analyze_message("", [], "", {}, ""), dict)
+    assert isinstance(await provider.analyze_message_with_meta("", [], "", {}, ""), ProviderExecutionResult)
+    assert isinstance(await provider.generate_response({}, "", "hi"), str)
+    assert isinstance(await provider.generate_response_with_meta({}, ""), ProviderExecutionResult)
+    assert isinstance(await provider.summarize_conversation([], None), str)
+    assert isinstance(await provider.summarize_conversation_with_meta([]), ProviderExecutionResult)
+    assert isinstance(await provider.judge_scheme_relevance("", [], "", {}, []), dict)
+    assert isinstance(await provider.judge_scheme_relevance_with_meta("", [], "", {}, []), ProviderExecutionResult)
+    assert provider.calls == 8
 
 
 class FakeEmbeddingProvider:
-    """Deterministic embedding provider backed by a fixed vector map.
-
-    Returns a stored 3-dimensional vector per text, ``None`` for unknown text,
-    and an empty batch for an empty input list. Mirrors the contract an
-    adapter must satisfy so the matching layer can skip vector ranking on a
-    missing embedding (spec 10.4 frozen list).
-    """
+    """Deterministic embedding provider. None for unknown text mirrors the
+    frozen-list rule (spec 10.4): a missing embedding must skip vector
+    ranking, not corrupt the query."""
 
     def __init__(self) -> None:
-        self._vectors: dict[str, list[float]] = {
-            "आवास": [1.0, 0.0, 0.0],
-            "housing": [0.9, 0.1, 0.0],
-        }
-        self.get_calls: int = 0
-        self.batch_calls: int = 0
+        self._vectors: dict[str, list[float]] = {"आवास": [1.0, 0.0, 0.0]}
 
     async def get_embedding(self, text: str) -> list[float] | None:
-        self.get_calls += 1
         return self._vectors.get(text)
 
     async def get_embeddings_batch(self, texts: list[str]) -> list[list[float]]:
-        self.batch_calls += 1
         if not texts:
             return []
         return [self._vectors.get(text, [0.0, 0.0, 0.0]) for text in texts]
 
 
-def _fallback_embedding_client_satisfies_port(
-    client: FallbackEmbeddingClient,
-) -> EmbeddingProvider:
-    """Static assertion: FallbackEmbeddingClient conforms to the port.
-
-    mypy verifies this at type-check time; the function is never called.
-    """
-    return client
-
-
 @pytest.mark.asyncio
-async def test_fake_embedding_provider_exercised_through_port() -> None:
-    """The embedding port is implementable and usable: a fake is typed as the
-    port and both methods are called through the port type."""
+async def test_fake_embedding_provider_conforms_and_none_on_miss() -> None:
+    """FakeEmbeddingProvider conforms to EmbeddingProvider. The None-on-miss
+    branch is the one invariant the matching layer depends on (skip vector
+    ranking), so it is asserted; the hit values are canned and not asserted."""
     provider: EmbeddingProvider = FakeEmbeddingProvider()
+    assert isinstance(provider, EmbeddingProvider)
 
-    housing = await provider.get_embedding("आवास")
-    assert housing == [1.0, 0.0, 0.0]
-
-    missing = await provider.get_embedding("unknown text")
-    assert missing is None
-
-    batch = await provider.get_embeddings_batch(["आवास", "housing", "unknown"])
-    assert batch[0] == [1.0, 0.0, 0.0]
-    assert batch[1] == [0.9, 0.1, 0.0]
-    assert batch[2] == [0.0, 0.0, 0.0]
-
-    empty = await provider.get_embeddings_batch([])
-    assert empty == []
-
-    fake = provider
-    assert isinstance(fake, FakeEmbeddingProvider)
-    assert fake.get_calls == 2
-    assert fake.batch_calls == 2
+    assert await provider.get_embedding("unknown") is None
+    assert isinstance(await provider.get_embedding("आवास"), list)
+    assert await provider.get_embeddings_batch([]) == []
+    assert len(await provider.get_embeddings_batch(["आवास", "unknown"])) == 2
 
 
 class FakeClock:
-    """Fixed clock for deterministic time-dependent tests.
-
-    Returns the same UTC datetime for every call unless advanced via
-    ``tick``. This is the seam the spec Phase 3 caution names: once a clock
-    is injected into the session helpers, TTL and memory-refresh logic can
-    be pinned without freezing wall time globally.
-    """
+    """Fixed clock. `tick` advances the fixed time; tests that cover
+    ordering over time (TTL, memory-refresh lag) use it."""
 
     def __init__(self, fixed: datetime | None = None) -> None:
         self._fixed = fixed or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
@@ -335,45 +264,34 @@ class FakeClock:
         return self._fixed
 
     def tick(self, to: datetime) -> None:
-        """Advance the fixed time for tests that cover ordering over time."""
         self._fixed = to
 
 
-@pytest.mark.asyncio
-async def test_fake_clock_exercised_through_port() -> None:
-    """The clock port is implementable and usable: a fake is typed as the
-    port and returns a stable UTC datetime across reads, then advances."""
+def test_fake_clock_conforms_and_tick_advances() -> None:
+    """FakeClock conforms to Clock, returns a stable UTC datetime, and tick
+    advances it. The advancement is the real invariant: TTL and refresh-lag
+    tests compare two reads, so the clock must move on demand."""
     clock: Clock = FakeClock()
+    assert isinstance(clock, Clock)
 
     first = clock.now()
-    again = clock.now()
-    assert first == again
+    assert first == clock.now()
     assert first.tzinfo == UTC
 
     clock.tick(datetime(2026, 1, 2, 0, 0, 0, tzinfo=UTC))
-    later = clock.now()
-    assert later > first
-    assert later.day == 2
-
-    fake = clock
-    assert isinstance(fake, FakeClock)
+    assert clock.now() > first
 
 
 class InMemoryIdempotencyStore:
-    """Set-backed atomic claim store for tests.
-
-    A single Python `set` with no await between check and insert is atomic
-    within one event loop, which is enough for the unit tests that exercise
-    the port. A production adapter needs a real conditional-write backend;
-    this fake does not model cross-process races.
-    """
+    """Set-backed atomic claim store. A single set with no await between
+    check and insert is atomic within one event loop, which is enough for
+    the unit tests. Cross-process races need a real conditional-write
+    backend; this fake does not model them."""
 
     def __init__(self) -> None:
         self._seen: set[int] = set()
-        self.claim_calls: int = 0
 
     async def claim(self, update_id: int) -> bool:
-        self.claim_calls += 1
         if update_id in self._seen:
             return False
         self._seen.add(update_id)
@@ -381,128 +299,88 @@ class InMemoryIdempotencyStore:
 
 
 @pytest.mark.asyncio
-async def test_in_memory_idempotency_store_exercised_through_port() -> None:
-    """The idempotency port is implementable and usable: a fake is typed as
-    the port and the first-seen semantics hold across repeats."""
+async def test_in_memory_idempotency_store_conforms_and_first_seen_wins() -> None:
+    """InMemoryIdempotencyStore conforms to IdempotencyStore. First-seen is
+    the real invariant: the port exists because Telegram retries, so the
+    first claim must return True and every retry False."""
     store: IdempotencyStore = InMemoryIdempotencyStore()
+    assert isinstance(store, IdempotencyStore)
 
     assert await store.claim(123456) is True
     assert await store.claim(123456) is False
     assert await store.claim(123457) is True
     assert await store.claim(123456) is False
 
-    fake = store
-    assert isinstance(fake, InMemoryIdempotencyStore)
-    assert fake.claim_calls == 4
-
 
 class FakeNotifier:
-    """Recording notifier that captures every outbound message.
-
-    Stores text sends, inline keyboards, callback answers, chat actions,
-    and voice or audio sends in order, plus the bytes returned for a voice
-    download. Used to assert the conversation layer replies through the port
-    without hitting the Telegram API.
-    """
+    """Recording notifier. Captures outbound sends so Phase 3+ tests assert
+    what the conversation layer sent without hitting the Telegram API."""
 
     def __init__(self, voice_bytes: bytes = b"audio") -> None:
         self.texts: list[tuple[int | str, str]] = []
         self.keyboards: list[dict[str, Any]] = []
         self.callback_answers: list[str] = []
         self.chat_actions: list[tuple[int | str, str]] = []
-        self.voice_sends: list[dict[str, Any]] = []
-        self.audio_sends: list[dict[str, Any]] = []
+        self.voice_sends: int = 0
+        self.audio_sends: int = 0
         self.download_returns: list[str] = []
         self._voice_bytes = voice_bytes
 
-    async def send_text(
-        self,
-        chat_id: int | str,
-        text: str,
-        parse_mode: str | None = None,
-    ) -> dict[str, Any]:
+    async def send_text(self, chat_id: int | str, text: str, parse_mode: str | None = None) -> dict[str, Any]:
         self.texts.append((chat_id, text))
-        return {"ok": True, "result": {}}
+        return {"ok": True}
 
     async def send_inline_keyboard(
-        self,
-        chat_id: int | str,
-        text: str,
-        buttons: list[list[dict[str, str]]],
-        parse_mode: str | None = None,
+        self, chat_id: int | str, text: str, buttons: list[list[dict[str, str]]], parse_mode: str | None = None
     ) -> dict[str, Any]:
         self.keyboards.append({"chat_id": chat_id, "text": text, "buttons": buttons})
-        return {"ok": True, "result": {}}
+        return {"ok": True}
 
     async def answer_callback_query(
-        self,
-        callback_query_id: str,
-        text: str | None = None,
-        show_alert: bool = False,
+        self, callback_query_id: str, text: str | None = None, show_alert: bool = False
     ) -> dict[str, Any]:
         self.callback_answers.append(callback_query_id)
-        return {"ok": True, "result": True}
+        return {"ok": True}
 
-    async def send_chat_action(
-        self,
-        chat_id: int | str,
-        action: str = "typing",
-    ) -> dict[str, Any]:
+    async def send_chat_action(self, chat_id: int | str, action: str = "typing") -> dict[str, Any]:
         self.chat_actions.append((chat_id, action))
-        return {"ok": True, "result": True}
+        return {"ok": True}
 
     async def send_voice(
-        self,
-        chat_id: int | str,
-        voice_data: bytes | str,
-        caption: str | None = None,
-        filename: str = "response.ogg",
-        content_type: str = "audio/ogg",
+        self, chat_id: int | str, voice_data: bytes | str, caption: str | None = None,
+        filename: str = "response.ogg", content_type: str = "audio/ogg",
     ) -> dict[str, Any]:
-        self.voice_sends.append({"chat_id": chat_id, "filename": filename, "content_type": content_type})
-        return {"ok": True, "result": {}}
+        self.voice_sends += 1
+        return {"ok": True}
 
     async def send_audio(
-        self,
-        chat_id: int | str,
-        audio_bytes: bytes,
-        filename: str = "response.ogg",
-        caption: str | None = None,
-        content_type: str = "audio/ogg",
+        self, chat_id: int | str, audio_bytes: bytes, filename: str = "response.ogg",
+        caption: str | None = None, content_type: str = "audio/ogg",
     ) -> dict[str, Any]:
-        self.audio_sends.append({"chat_id": chat_id, "filename": filename, "content_type": content_type})
-        return {"ok": True, "result": {}}
+        self.audio_sends += 1
+        return {"ok": True}
 
     async def download_voice(self, file_id: str) -> bytes:
         self.download_returns.append(file_id)
         return self._voice_bytes
 
 
-def _telegram_client_satisfies_notifier_port(client: TelegramClient) -> Notifier:
-    """Static assertion: TelegramClient conforms to the Notifier port.
-
-    mypy verifies this at type-check time; the function is never called
-    because TelegramClient needs live settings to construct.
-    """
-    return client
-
-
 @pytest.mark.asyncio
-async def test_fake_notifier_exercised_through_port() -> None:
-    """The notifier port is implementable and usable: a fake is typed as the
-    port and the full send plus download surface is called through it."""
-    notifier: Notifier = FakeNotifier(voice_bytes=b"voice-bytes")
+async def test_fake_notifier_conforms_and_records() -> None:
+    """FakeNotifier conforms to Notifier and every method is awaitable. The
+    recorder counts are asserted because Phase 3 tests read them to verify
+    what the conversation layer sent; a broken recorder would silently lose
+    assertions later. Return payloads are canned and not asserted."""
+    notifier: Notifier = FakeNotifier(voice_bytes=b"voice")
+    assert isinstance(notifier, Notifier)
 
     await notifier.send_chat_action(123, "typing")
     await notifier.answer_callback_query("cb-1")
     await notifier.send_text(123, "नमस्ते")
-    await notifier.send_inline_keyboard(
-        chat_id=123, text="चुनें", buttons=[[{"text": "विकल्प 1", "callback_data": "1"}]]
-    )
-    voice = await notifier.download_voice("file-abc")
-    assert voice == b"voice-bytes"
-    await notifier.send_voice(123, b"audio-bytes", filename="reply.ogg", content_type="audio/ogg")
-    await notifier.send_audio(123, b"audio-bytes", filename="reply.ogg", content_type="audio/ogg")
+    await notifier.send_inline_keyboard(123, "चुनें", [[{"text": "1", "callback_data": "1"}]])
+    assert await notifier.download_voice("file-abc") == b"voice"
+    await notifier.send_voice(123, b"x")
+    await notifier.send_audio(123, b"x")
 
     fake = notifier
     assert isinstance(fake, FakeNotifier)
@@ -511,17 +389,14 @@ async def test_fake_notifier_exercised_through_port() -> None:
     assert fake.texts == [(123, "नमस्ते")]
     assert len(fake.keyboards) == 1
     assert fake.download_returns == ["file-abc"]
-    assert len(fake.voice_sends) == 1
-    assert len(fake.audio_sends) == 1
+    assert fake.voice_sends == 1
+    assert fake.audio_sends == 1
 
 
 class InMemoryRejectionRuleRepository:
-    """List-backed rejection rule repository for tests.
-
-    Holds RejectionRule instances and answers the four read methods by
-    filtering in memory. Severity ordering matches the legacy repo's
-    critical/high/warning ordering.
-    """
+    """List-backed rejection rule repository. Severity order mirrors the
+    legacy repo (critical, high, warning), which is the order the
+    rejection-warnings view truncates from."""
 
     _SEVERITY_ORDER = {"critical": 0, "high": 1, "warning": 2}
 
@@ -529,64 +404,53 @@ class InMemoryRejectionRuleRepository:
         self._rules: list[RejectionRule] = list(rules or [])
 
     async def get_rules_by_scheme(self, scheme_id: str) -> list[RejectionRule]:
-        hits = [rule for rule in self._rules if rule.scheme_id == scheme_id]
+        hits = [r for r in self._rules if r.scheme_id == scheme_id]
         return sorted(hits, key=lambda r: self._SEVERITY_ORDER.get(r.severity, 3))
 
     async def get_rules_by_ids(self, rule_ids: list[str]) -> list[RejectionRule]:
         if not rule_ids:
             return []
         wanted = set(rule_ids)
-        hits = [rule for rule in self._rules if rule.id in wanted]
-        return sorted(hits, key=lambda r: self._SEVERITY_ORDER.get(r.severity, 3))
+        return sorted(
+            [r for r in self._rules if r.id in wanted],
+            key=lambda r: self._SEVERITY_ORDER.get(r.severity, 3),
+        )
 
     async def get_critical_rules(self, scheme_id: str) -> list[RejectionRule]:
-        hits = [
-            rule for rule in self._rules
-            if rule.scheme_id == scheme_id and rule.severity == "critical"
-        ]
-        return hits
+        return [r for r in self._rules if r.scheme_id == scheme_id and r.severity == "critical"]
 
     async def get_all_rules(self) -> list[RejectionRule]:
         return sorted(self._rules, key=lambda r: (r.scheme_id, self._SEVERITY_ORDER.get(r.severity, 3)))
 
 
-def _rejection_rule(seed: str = "RULE-1", scheme_id: str = "SCH-1", severity: str = "high") -> RejectionRule:
+def _rule(seed: str, scheme_id: str, severity: str) -> RejectionRule:
     return RejectionRule(
-        id=seed,
-        scheme_id=scheme_id,
-        rule_type="procedural",
-        description="desc",
-        description_hindi="विवरण",
-        severity=severity,
-        prevention_tip="tip",
+        id=seed, scheme_id=scheme_id, rule_type="procedural",
+        description="d", description_hindi="वि", severity=severity, prevention_tip="t",
     )
 
 
 @pytest.mark.asyncio
-async def test_in_memory_rejection_rule_repository_exercised_through_port() -> None:
-    """The rejection rule port is implementable and usable: a fake is typed
-    as the port and the four read methods filter correctly."""
-    rules = [
-        _rejection_rule("RULE-1", "SCH-1", "warning"),
-        _rejection_rule("RULE-2", "SCH-1", "critical"),
-        _rejection_rule("RULE-3", "SCH-2", "high"),
-    ]
-    repo: RejectionRuleRepository = InMemoryRejectionRuleRepository(rules)
+async def test_in_memory_rejection_rule_repository_conforms_and_orders_by_severity() -> None:
+    """InMemoryRejectionRuleRepository conforms to RejectionRuleRepository.
+    Severity ordering is the real invariant: the rejection-warnings view
+    truncates to five rules, so a critical rule must sort above a warning or
+    it gets dropped. The order, not the canned rule content, is asserted."""
+    repo: RejectionRuleRepository = InMemoryRejectionRuleRepository([
+        _rule("R1", "S1", "warning"),
+        _rule("R2", "S1", "critical"),
+        _rule("R3", "S2", "high"),
+    ])
+    assert isinstance(repo, RejectionRuleRepository)
 
-    by_scheme = await repo.get_rules_by_scheme("SCH-1")
-    assert [rule.id for rule in by_scheme] == ["RULE-2", "RULE-1"]
+    by_scheme = await repo.get_rules_by_scheme("S1")
+    assert [r.id for r in by_scheme] == ["R2", "R1"]
 
-    by_ids = await repo.get_rules_by_ids(["RULE-3", "RULE-1"])
-    assert {rule.id for rule in by_ids} == {"RULE-3", "RULE-1"}
+    by_ids = await repo.get_rules_by_ids(["R3", "R1"])
+    assert [r.id for r in by_ids] == ["R3", "R1"]
 
-    critical = await repo.get_critical_rules("SCH-1")
-    assert [rule.id for rule in critical] == ["RULE-2"]
+    critical = await repo.get_critical_rules("S1")
+    assert [r.id for r in critical] == ["R2"]
 
-    empty_ids = await repo.get_rules_by_ids([])
-    assert empty_ids == []
-
-    all_rules = await repo.get_all_rules()
-    assert len(all_rules) == 3
-
-    fake = repo
-    assert isinstance(fake, InMemoryRejectionRuleRepository)
+    assert await repo.get_rules_by_ids([]) == []
+    assert len(await repo.get_all_rules()) == 3

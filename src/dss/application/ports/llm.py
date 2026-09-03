@@ -18,7 +18,7 @@ is the port-facing adapter and implements all eight.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generic, Literal, Protocol, TypeVar
+from typing import Any, Generic, Literal, Protocol, TypeVar, runtime_checkable
 
 TaskPriority = Literal["inline", "background"]
 T = TypeVar("T")
@@ -35,6 +35,7 @@ class ProviderExecutionResult(Generic[T]):
     error: str | None = None
 
 
+@runtime_checkable
 class LLMProvider(Protocol):
     """Provider contract for LLM-backed analysis, generation, and judging.
 

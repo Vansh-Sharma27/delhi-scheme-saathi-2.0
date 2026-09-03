@@ -17,9 +17,10 @@ Methods that the handler does not call (`get_file`, `send_message`,
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
+@runtime_checkable
 class Notifier(Protocol):
     """Outbound Telegram surface consumed by the webhook handler."""
 
