@@ -34,6 +34,7 @@ from typing import Any
 import pytest
 
 from src.config import get_settings
+from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.idempotency_store import IdempotencyStore
@@ -46,10 +47,12 @@ from src.dss.application.ports.notifier import Notifier
 from src.dss.application.ports.rejection_rule_repository import (
     RejectionRuleRepository,
 )
+from src.dss.application.ports.session_repository import SessionStore
 from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule
+from src.models.session import Session
 from src.services.ai_orchestrator import AIOrchestrator, AITaskType
 from src.services.scheme_relevance import (
     CLARIFY_CONFIDENCE_THRESHOLD,
@@ -95,6 +98,13 @@ def test_notifier_port_conformance() -> None:
     """TelegramClient exposes every Notifier method (no construction; the
     client needs live settings)."""
     assert issubclass(TelegramClient, Notifier)
+
+
+def test_session_repository_port_conformance() -> None:
+    """Both session store backends expose the SessionStore methods. DynamoDB
+    is checked via issubclass without construction, so no boto3 client."""
+    assert issubclass(InMemorySessionStore, SessionStore)
+    assert issubclass(DynamoDBSessionStore, SessionStore)
 
 
 class FakeLLMProvider:
@@ -391,6 +401,27 @@ async def test_fake_notifier_conforms_and_records() -> None:
     assert fake.download_returns == ["file-abc"]
     assert fake.voice_sends == 1
     assert fake.audio_sends == 1
+
+
+@pytest.mark.asyncio
+async def test_in_memory_session_store_exercised_through_port() -> None:
+    """InMemorySessionStore (the real local-dev adapter, no settings needed)
+    is exercised through the SessionStore port with a save/get/delete
+    round-trip. This is both the gate's in-memory fake and a real behaviour
+    check that the existing adapter still round-trips a Session, including
+    the deep-copy the store does on save and get."""
+    store: SessionStore = InMemorySessionStore()
+    assert isinstance(store, SessionStore)
+
+    session = Session(user_id="api:roundtrip")
+    await store.save(session)
+    fetched = await store.get("api:roundtrip")
+    assert fetched is not None
+    assert fetched.user_id == "api:roundtrip"
+    assert fetched is not session
+
+    await store.delete("api:roundtrip")
+    assert await store.get("api:roundtrip") is None
 
 
 class InMemoryRejectionRuleRepository:
