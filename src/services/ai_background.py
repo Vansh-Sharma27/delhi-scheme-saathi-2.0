@@ -6,50 +6,23 @@ import asyncio
 import json
 import logging
 from contextlib import suppress
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
-from typing import Protocol
 
 import boto3
 
 from src.config import get_settings
 from src.db.session_store import get_session_store
+from src.dss.application.ports.work_queue import (
+    AIWorkItem as AIWorkItem,
+)
+from src.dss.application.ports.work_queue import (
+    AIWorkQueue as AIWorkQueue,
+)
+from src.dss.application.ports.work_queue import (
+    AIWorkType as AIWorkType,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class AIWorkType(StrEnum):
-    """Background AI work types."""
-
-    REFRESH_WORKING_MEMORY = "refresh_working_memory"
-
-
-@dataclass(slots=True)
-class AIWorkItem:
-    """Background AI work payload."""
-
-    work_type: AIWorkType
-    user_id: str
-    turn_count: int
-    enqueued_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    receipt_handle: str | None = None
-
-
-class AIWorkQueue(Protocol):
-    """Queue abstraction for async AI jobs."""
-
-    async def enqueue(self, item: AIWorkItem) -> None:
-        """Enqueue a work item."""
-
-    async def dequeue(self) -> AIWorkItem | None:
-        """Dequeue the next work item."""
-
-    async def ack(self, item: AIWorkItem) -> None:
-        """Acknowledge a completed work item."""
-
-    async def close(self) -> None:
-        """Close queue resources."""
 
 
 class InMemoryAIWorkQueue:

@@ -48,6 +48,11 @@ from src.dss.application.ports.rejection_rule_repository import (
     RejectionRuleRepository,
 )
 from src.dss.application.ports.session_repository import SessionStore
+from src.dss.application.ports.work_queue import (
+    AIWorkItem,
+    AIWorkQueue,
+    AIWorkType,
+)
 from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.telegram import TelegramClient
@@ -422,6 +427,45 @@ async def test_in_memory_session_store_exercised_through_port() -> None:
 
     await store.delete("api:roundtrip")
     assert await store.get("api:roundtrip") is None
+
+
+def test_work_queue_port_conformance() -> None:
+    """Both queue backends expose the AIWorkQueue methods. issubclass needs
+    no construction, so SQSAIWorkQueue is checked without a boto3 client."""
+    from src.services.ai_background import InMemoryAIWorkQueue, SQSAIWorkQueue
+
+    assert issubclass(InMemoryAIWorkQueue, AIWorkQueue)
+    assert issubclass(SQSAIWorkQueue, AIWorkQueue)
+
+
+@pytest.mark.asyncio
+async def test_in_memory_ai_work_queue_exercised_through_port() -> None:
+    """InMemoryAIWorkQueue (the real local-dev adapter) is exercised through
+    the AIWorkQueue port with an enqueue/dequeue/ack round-trip. The
+    FIFO order is the real invariant: the worker drains items in the order
+    they were enqueued, so a later item must not dequeue before an earlier
+    one. The payload type AIWorkItem is also constructed and read through
+    the port types to confirm the moved dataclass still round-trips."""
+    from src.services.ai_background import InMemoryAIWorkQueue
+
+    queue: AIWorkQueue = InMemoryAIWorkQueue()
+    assert isinstance(queue, AIWorkQueue)
+
+    first = AIWorkItem(work_type=AIWorkType.REFRESH_WORKING_MEMORY, user_id="api:u1", turn_count=1)
+    second = AIWorkItem(work_type=AIWorkType.REFRESH_WORKING_MEMORY, user_id="api:u2", turn_count=2)
+    await queue.enqueue(first)
+    await queue.enqueue(second)
+
+    out1 = await queue.dequeue()
+    assert out1 is not None
+    assert out1.user_id == "api:u1"
+    out2 = await queue.dequeue()
+    assert out2 is not None
+    assert out2.user_id == "api:u2"
+
+    await queue.ack(out1)
+    await queue.ack(out2)
+    await queue.close()
 
 
 class InMemoryRejectionRuleRepository:
