@@ -1,25 +1,11 @@
 """Session store - in-memory for MVP, DynamoDB for production."""
 
 from datetime import UTC, datetime
-from typing import Protocol
 
+from src.dss.application.ports.session_repository import (
+    SessionStore as SessionStore,
+)
 from src.models.session import Session
-
-
-class SessionStore(Protocol):
-    """Session store protocol for dependency injection."""
-
-    async def get(self, user_id: str) -> Session | None:
-        """Get session by user ID."""
-        ...
-
-    async def save(self, session: Session) -> None:
-        """Save or update session."""
-        ...
-
-    async def delete(self, user_id: str) -> None:
-        """Delete session."""
-        ...
 
 
 class InMemorySessionStore:

@@ -1,4 +1,4 @@
-"""Sarvam AI client for speech-to-text and text-to-speech.
+﻿"""Sarvam AI client for speech-to-text and text-to-speech.
 
 Sarvam AI provides high-quality Indian language AI services.
 This client handles:
@@ -10,29 +10,18 @@ API Documentation: https://docs.sarvam.ai/
 
 import base64
 import logging
-from dataclasses import dataclass
 
 import httpx
 
 from src.config import get_settings
+from src.dss.application.ports.speech import (
+    STTResult as STTResult,
+)
+from src.dss.application.ports.speech import (
+    TTSResult as TTSResult,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class STTResult:
-    """Speech-to-text result."""
-    text: str
-    confidence: float
-    language: str = "hi"
-
-
-@dataclass
-class TTSResult:
-    """Text-to-speech result."""
-    audio_bytes: bytes
-    content_type: str = "audio/wav"
-    duration_seconds: float = 0.0
 
 
 class SarvamClient:

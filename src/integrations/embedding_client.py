@@ -10,11 +10,13 @@ preferring the better multilingual model for Indian languages.
 """
 
 import logging
-from typing import Protocol
 
 import httpx
 
 from src.config import get_settings
+from src.dss.application.ports.embeddings import (
+    EmbeddingProvider as EmbeddingProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +25,6 @@ EMBEDDING_DIM = 1024
 # Voyage AI configuration
 VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
 VOYAGE_MODEL = "voyage-multilingual-2"
-
-
-class EmbeddingProvider(Protocol):
-    """Protocol for embedding providers."""
-    async def get_embedding(self, text: str) -> list[float] | None: ...
-    async def get_embeddings_batch(self, texts: list[str]) -> list[list[float]]: ...
 
 
 class FallbackEmbeddingClient:
