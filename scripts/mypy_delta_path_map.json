@@ -1,1 +1,4 @@
-{}
+{
+    "src/integrations/embedding_client.py": "src/dss/infrastructure/embeddings/fallback_client.py",
+    "src/integrations/jina_client.py": "src/dss/infrastructure/embeddings/jina_client.py"
+}
