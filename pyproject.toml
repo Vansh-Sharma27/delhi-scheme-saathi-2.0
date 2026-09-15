@@ -175,3 +175,8 @@ source_modules = ["src.dss.bootstrap", "src.dss"]
 # module which in turn imports `src.dss.*` also fails.
 forbidden_modules = ["src.**"]
 allow_indirect_imports = false
+ignore_imports = [
+    "src.dss.infrastructure.embeddings.fallback_client -> src.integrations.embedding_client",
+    "src.dss.infrastructure.embeddings.jina_client -> src.integrations.jina_client",
+]
+unmatched_ignore_imports_alerting = "error"
