@@ -61,8 +61,8 @@ from src.dss.application.ports.work_queue import (
     AIWorkQueue,
     AIWorkType,
 )
+from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.bhashini import BhashiniClient
-from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.sarvam import SarvamClient
 from src.integrations.telegram import TelegramClient

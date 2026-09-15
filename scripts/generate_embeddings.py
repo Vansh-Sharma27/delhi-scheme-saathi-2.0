@@ -34,7 +34,7 @@ async def main():
 
     import asyncpg
 
-    from src.integrations.embedding_client import get_embedding_client
+    from src.dss.infrastructure.embeddings.fallback_client import get_embedding_client
 
     print("Connecting to database...")
     pool = await asyncpg.create_pool(dsn=database_url)
