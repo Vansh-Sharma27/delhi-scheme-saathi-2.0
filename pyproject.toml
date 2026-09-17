@@ -184,6 +184,8 @@ allow_indirect_imports = false
 # entry that stops matching any import in the graph fails the contract at
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
+    "src.dss.infrastructure.speech.sarvam -> src.integrations.sarvam",
+    "src.dss.infrastructure.speech.bhashini -> src.integrations.bhashini",
     "src.dss.infrastructure.** -> src.config",
 ]
 unmatched_ignore_imports_alerting = "error"
