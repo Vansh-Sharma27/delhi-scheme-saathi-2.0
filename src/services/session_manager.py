@@ -3,7 +3,8 @@
 import logging
 from datetime import UTC, datetime
 
-from src.db.session_store import SessionStore, get_session_store
+from src.dss.application.ports.session_repository import SessionStore
+from src.dss.infrastructure.sessions.session_store import get_session_store
 from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
 
 logger = logging.getLogger(__name__)

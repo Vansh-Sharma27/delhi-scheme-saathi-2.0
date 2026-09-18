@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 import boto3
 
 from src.config import get_settings
-from src.db.session_store import get_session_store
 from src.dss.application.ports.work_queue import (
     AIWorkItem as AIWorkItem,
 )
@@ -21,6 +20,7 @@ from src.dss.application.ports.work_queue import (
 from src.dss.application.ports.work_queue import (
     AIWorkType as AIWorkType,
 )
+from src.dss.infrastructure.sessions.session_store import get_session_store
 
 logger = logging.getLogger(__name__)
 
