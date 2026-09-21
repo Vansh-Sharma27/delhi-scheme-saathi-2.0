@@ -1,14 +1,21 @@
-"""Background queue and worker for non-urgent AI tasks."""
+"""Background queue and worker for non-urgent AI tasks.
+
+The queue adapters (``InMemoryAIWorkQueue``, ``SQSAIWorkQueue``) and the SQS
+payload codec (``serialize_work_item``, ``deserialize_work_item``) moved to
+``src.dss.infrastructure.queues.work_queue`` in Phase 3 and are re-exported
+below so existing imports keep working; the re-exports are removed in Phase 6.
+This module keeps the application-side wiring: the configured-queue singleton,
+the default-queue factory, the memory-refresh enqueue helper, the background
+worker loop, and the work-item processor. Constructor injection replaces the
+singletons in Phase 6.
+"""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from contextlib import suppress
 from datetime import UTC, datetime
-
-import boto3
 
 from src.config import get_settings
 from src.dss.application.ports.work_queue import (
@@ -20,110 +27,24 @@ from src.dss.application.ports.work_queue import (
 from src.dss.application.ports.work_queue import (
     AIWorkType as AIWorkType,
 )
+from src.dss.infrastructure.queues.work_queue import (
+    InMemoryAIWorkQueue as InMemoryAIWorkQueue,
+)
+from src.dss.infrastructure.queues.work_queue import (
+    SQSAIWorkQueue as SQSAIWorkQueue,
+)
+from src.dss.infrastructure.queues.work_queue import (
+    deserialize_work_item as deserialize_work_item,
+)
+from src.dss.infrastructure.queues.work_queue import (
+    serialize_work_item as serialize_work_item,
+)
 from src.dss.infrastructure.sessions.session_store import get_session_store
 
 logger = logging.getLogger(__name__)
 
-
-class InMemoryAIWorkQueue:
-    """In-process queue for local development and tests."""
-
-    def __init__(self) -> None:
-        self._queue: asyncio.Queue[AIWorkItem] = asyncio.Queue()
-
-    async def enqueue(self, item: AIWorkItem) -> None:
-        await self._queue.put(item)
-
-    async def dequeue(self) -> AIWorkItem | None:
-        return await self._queue.get()
-
-    async def ack(self, item: AIWorkItem) -> None:
-        self._queue.task_done()
-
-    async def close(self) -> None:
-        return None
-
-
-class SQSAIWorkQueue:
-    """SQS-backed queue for shared background AI jobs across instances."""
-
-    def __init__(self, queue_url: str, region: str) -> None:
-        self._queue_url = queue_url
-        self._client = boto3.client("sqs", region_name=region)
-
-    async def enqueue(self, item: AIWorkItem) -> None:
-        body = json.dumps(serialize_work_item(item))
-        await asyncio.to_thread(
-            self._client.send_message,
-            QueueUrl=self._queue_url,
-            MessageBody=body,
-        )
-
-    async def dequeue(self) -> AIWorkItem | None:
-        response = await asyncio.to_thread(
-            self._client.receive_message,
-            QueueUrl=self._queue_url,
-            MaxNumberOfMessages=1,
-            WaitTimeSeconds=20,
-            VisibilityTimeout=60,
-        )
-        messages = response.get("Messages", [])
-        if not messages:
-            return None
-
-        raw_message = messages[0]
-        body = json.loads(raw_message["Body"])
-        return deserialize_work_item(
-            body,
-            receipt_handle=raw_message.get("ReceiptHandle"),
-        )
-
-    async def ack(self, item: AIWorkItem) -> None:
-        if not item.receipt_handle:
-            return
-        await asyncio.to_thread(
-            self._client.delete_message,
-            QueueUrl=self._queue_url,
-            ReceiptHandle=item.receipt_handle,
-        )
-
-    async def close(self) -> None:
-        return None
-
-
 _ai_work_queue: AIWorkQueue | None = None
 _worker_task: asyncio.Task[None] | None = None
-
-
-def serialize_work_item(item: AIWorkItem) -> dict[str, str | int]:
-    """Serialize a work item into a queue-safe payload."""
-    return {
-        "work_type": item.work_type.value,
-        "user_id": item.user_id,
-        "turn_count": item.turn_count,
-        "enqueued_at": item.enqueued_at.isoformat(),
-    }
-
-
-def deserialize_work_item(
-    payload: dict[str, object],
-    *,
-    receipt_handle: str | None = None,
-) -> AIWorkItem:
-    """Deserialize a queue payload into a typed work item."""
-    enqueued_at_raw = payload.get("enqueued_at")
-    if isinstance(enqueued_at_raw, str):
-        enqueued_at = datetime.fromisoformat(enqueued_at_raw)
-    else:
-        enqueued_at = datetime.now(UTC)
-
-    return AIWorkItem(
-        work_type=AIWorkType(str(payload["work_type"])),
-        user_id=str(payload["user_id"]),
-        turn_count=int(payload.get("turn_count", 0)),
-        enqueued_at=enqueued_at,
-        receipt_handle=receipt_handle,
-    )
 
 
 def configure_ai_work_queue(queue: AIWorkQueue | None) -> None:

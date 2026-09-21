@@ -184,7 +184,6 @@ allow_indirect_imports = false
 # entry that stops matching any import in the graph fails the contract at
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
-    "src.dss.infrastructure.queues.work_queue -> src.services.ai_background",
     "src.dss.infrastructure.** -> src.config",
     "src.dss.infrastructure.sessions.** -> src.models.session",
 ]

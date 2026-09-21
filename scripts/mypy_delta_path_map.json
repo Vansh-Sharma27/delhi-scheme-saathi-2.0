@@ -3,5 +3,6 @@
     "src/integrations/jina_client.py": "src/dss/infrastructure/embeddings/jina_client.py",
     "src/integrations/sarvam.py": "src/dss/infrastructure/speech/sarvam.py",
     "src/integrations/bhashini.py": "src/dss/infrastructure/speech/bhashini.py",
-    "src/db/session_store.py": "src/dss/infrastructure/sessions/session_store.py"
+    "src/db/session_store.py": "src/dss/infrastructure/sessions/session_store.py",
+    "src/services/ai_background.py": "src/dss/infrastructure/queues/work_queue.py"
 }
