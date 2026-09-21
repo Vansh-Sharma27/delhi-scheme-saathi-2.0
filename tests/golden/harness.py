@@ -301,7 +301,7 @@ async def run_scenario(
     with (
         patch("src.models.session.datetime") as mock_model_dt,
         patch("src.services.session_manager.datetime") as mock_mgr_dt,
-        patch("src.db.session_store.datetime") as mock_store_dt,
+        patch("src.dss.infrastructure.sessions.session_store.datetime") as mock_store_dt,
         patch(
             "src.services.scheme_matcher.get_embedding_client",
             return_value=fake_embedding_client,
