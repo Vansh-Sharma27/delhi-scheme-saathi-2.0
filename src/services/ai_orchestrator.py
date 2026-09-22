@@ -12,9 +12,9 @@ from time import perf_counter
 from typing import Any, TypeVar
 
 from src.config import get_settings
-from src.integrations.llm_client import (
+from src.dss.application.ports.llm import ProviderExecutionResult
+from src.dss.infrastructure.ai.fallback_client import (
     FallbackLLMClient,
-    ProviderExecutionResult,
     get_llm_client,
 )
 from src.models.scheme import SchemeMatch

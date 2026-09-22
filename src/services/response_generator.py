@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from src.db import scheme_repo
-from src.integrations.llm_client import FallbackLLMClient
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.models.scheme import Scheme
 from src.models.session import Session, UserProfile
 from src.prompts.loader import get_generate_response_prompt
