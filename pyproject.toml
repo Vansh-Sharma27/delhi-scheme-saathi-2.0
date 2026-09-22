@@ -184,6 +184,9 @@ allow_indirect_imports = false
 # entry that stops matching any import in the graph fails the contract at
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
+    "src.dss.infrastructure.ai.fallback_client -> src.integrations.llm_client",
+    "src.dss.infrastructure.ai.grok_client -> src.integrations.grok_client",
+    "src.dss.infrastructure.ai.bedrock_client -> src.integrations.bedrock_client",
     "src.dss.infrastructure.** -> src.config",
     "src.dss.infrastructure.sessions.** -> src.models.session",
 ]

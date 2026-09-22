@@ -1,9 +1,11 @@
 """New adapter paths must remain usable throughout expand/migrate/contract."""
 
 from src.dss.application.ports.embeddings import EmbeddingProvider
+from src.dss.application.ports.llm import LLMProvider
 from src.dss.application.ports.session_repository import SessionStore
 from src.dss.application.ports.speech import SpeechProvider
 from src.dss.application.ports.work_queue import AIWorkQueue
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.infrastructure.embeddings.fallback_client import FallbackEmbeddingClient
 from src.dss.infrastructure.embeddings.jina_client import JinaEmbeddingClient
 from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue, SQSAIWorkQueue
@@ -30,3 +32,7 @@ def test_expanded_session_stores_expose_the_port() -> None:
 def test_expanded_work_queues_expose_the_port() -> None:
     assert issubclass(InMemoryAIWorkQueue, AIWorkQueue)
     assert issubclass(SQSAIWorkQueue, AIWorkQueue)
+
+
+def test_expanded_llm_composite_exposes_the_port() -> None:
+    assert issubclass(FallbackLLMClient, LLMProvider)
