@@ -36,3 +36,11 @@ def test_expanded_work_queues_expose_the_port() -> None:
 
 def test_expanded_llm_composite_exposes_the_port() -> None:
     assert issubclass(FallbackLLMClient, LLMProvider)
+
+
+def test_expanded_prompt_loader_matches_legacy_templates() -> None:
+    from src.dss.infrastructure.ai.prompts.loader import load_prompt
+    from src.prompts.loader import load_prompt as legacy_load
+
+    for name in ("analysis_system_prompt", "generate_response", "system_prompt"):
+        assert load_prompt(name) == legacy_load(name)
