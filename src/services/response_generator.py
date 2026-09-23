@@ -6,9 +6,9 @@ from typing import Any
 
 from src.db import scheme_repo
 from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
+from src.dss.infrastructure.ai.prompts.loader import get_generate_response_prompt
 from src.models.scheme import Scheme
 from src.models.session import Session, UserProfile
-from src.prompts.loader import get_generate_response_prompt
 from src.services.ai_orchestrator import get_ai_orchestrator
 
 logger = logging.getLogger(__name__)

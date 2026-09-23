@@ -25,10 +25,10 @@ import asyncpg
 
 from src.config import get_settings
 from src.db.session_store import SessionStore
+from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
 from src.models.api import ChatRequest, ChatResponse
 from src.models.scheme import SchemeMatch
 from src.models.session import ConversationState, Session, UserProfile
-from src.prompts.loader import get_analysis_system_prompt
 from src.services import (
     fsm,
     life_event_classifier,
