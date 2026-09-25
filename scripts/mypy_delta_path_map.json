@@ -4,5 +4,8 @@
     "src/integrations/sarvam.py": "src/dss/infrastructure/speech/sarvam.py",
     "src/integrations/bhashini.py": "src/dss/infrastructure/speech/bhashini.py",
     "src/db/session_store.py": "src/dss/infrastructure/sessions/session_store.py",
-    "src/services/ai_background.py": "src/dss/infrastructure/queues/work_queue.py"
+    "src/services/ai_background.py": "src/dss/infrastructure/queues/work_queue.py",
+    "src/integrations/llm_client.py": "src/dss/infrastructure/ai/fallback_client.py",
+    "src/integrations/grok_client.py": "src/dss/infrastructure/ai/grok_client.py",
+    "src/integrations/bedrock_client.py": "src/dss/infrastructure/ai/bedrock_client.py"
 }
