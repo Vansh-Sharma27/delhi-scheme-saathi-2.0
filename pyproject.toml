@@ -184,6 +184,10 @@ allow_indirect_imports = false
 # entry that stops matching any import in the graph fails the contract at
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
+    "src.dss.infrastructure.database.scheme_repo -> src.db.scheme_repo",
+    "src.dss.infrastructure.database.document_repo -> src.db.document_repo",
+    "src.dss.infrastructure.database.office_repo -> src.db.office_repo",
+    "src.dss.infrastructure.database.rejection_rule_repo -> src.db.rejection_rule_repo",
     "src.dss.infrastructure.** -> src.config",
     "src.dss.infrastructure.sessions.** -> src.models.session",
     "src.dss.infrastructure.ai.grok_client -> src.utils.scheme_catalog",

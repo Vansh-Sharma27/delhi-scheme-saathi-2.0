@@ -44,3 +44,24 @@ def test_expanded_prompt_loader_matches_legacy_templates() -> None:
 
     for name in ("analysis_system_prompt", "generate_response", "system_prompt"):
         assert load_prompt(name) == legacy_load(name)
+
+
+def test_expanded_repositories_share_the_legacy_functions() -> None:
+    from src.db import document_repo, office_repo, rejection_rule_repo, scheme_repo
+    from src.dss.infrastructure.database import (
+        document_repo as documents,
+    )
+    from src.dss.infrastructure.database import (
+        office_repo as offices,
+    )
+    from src.dss.infrastructure.database import (
+        rejection_rule_repo as rules,
+    )
+    from src.dss.infrastructure.database import (
+        scheme_repo as schemes,
+    )
+
+    assert documents.get_document_by_id is document_repo.get_document_by_id
+    assert offices.get_nearest_offices is office_repo.get_nearest_offices
+    assert rules.get_rules_by_scheme is rejection_rule_repo.get_rules_by_scheme
+    assert schemes.hybrid_search is scheme_repo.hybrid_search
