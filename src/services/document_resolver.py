@@ -5,7 +5,7 @@ from typing import Any
 
 import asyncpg
 
-from src.db.document_repo import get_document_by_id
+from src.dss.infrastructure.database.document_repo import get_document_by_id
 from src.models.document import Document, DocumentChain
 
 logger = logging.getLogger(__name__)
