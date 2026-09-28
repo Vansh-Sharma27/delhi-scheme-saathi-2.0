@@ -28,6 +28,10 @@ async def test_postgres_adapters_forward_every_port_method(monkeypatch: pytest.M
             if name.startswith("_") or not inspect.iscoroutinefunction(method):
                 continue
             parameters = list(inspect.signature(method).parameters.values())[1:]
+            actual = list(inspect.signature(getattr(adapter, name)).parameters.values())
+            assert [(p.name, p.kind, p.default) for p in actual] == [
+                (p.name, p.kind, p.default) for p in parameters
+            ]
             args = [object() for _ in parameters]
             result = object()
             function = AsyncMock(return_value=result)
