@@ -37,6 +37,15 @@ GOLDEN_REGENERATE_APPROVAL_ENV = "GOLDEN_REGENERATE_APPROVED"
 _FIXED_TIME = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
 _TIMEOUT_SECONDS = 0.01
 _SCENARIO_ID_RE = re.compile(r"[a-z0-9_]+")
+
+
+class _FixedClock:
+    """Time source shared by conversation mutations and storage."""
+
+    def now(self) -> datetime:
+        return _FIXED_TIME
+
+
 _CAPTURED_RESPONSE_FIELDS = {
     "text",
     "text_hindi",
@@ -264,7 +273,7 @@ async def run_scenario(
     session_store: SessionStore | None = None,
 ) -> ScenarioResult:
     """Drive a multi-turn conversation with isolated injected dependencies."""
-    store = session_store or InMemorySessionStore()
+    store = session_store or InMemorySessionStore(clock=_FixedClock())
     result = ScenarioResult(scenario_id=scenario_id)
     usage_events: list[LLMUsageEvent] = []
 
@@ -283,6 +292,7 @@ async def run_scenario(
         db_pool=AsyncMock(),
         ai_orchestrator=orchestrator,
         session_store=store,
+        clock=_FixedClock(),
     )
 
     get_scheme_mock = AsyncMock(return_value=None)
@@ -299,9 +309,6 @@ async def run_scenario(
     fake_hybrid_search = AsyncMock(return_value=[])
 
     with (
-        patch("src.models.session.datetime") as mock_model_dt,
-        patch("src.services.session_manager.datetime") as mock_mgr_dt,
-        patch("src.dss.infrastructure.sessions.session_store.datetime") as mock_store_dt,
         patch(
             "src.services.scheme_matcher.get_embedding_client",
             return_value=fake_embedding_client,
@@ -336,9 +343,6 @@ async def run_scenario(
             new=AsyncMock(return_value=False),
         ),
     ):
-        for mock_dt in (mock_model_dt, mock_mgr_dt, mock_store_dt):
-            mock_dt.now.return_value = _FIXED_TIME
-
         for turn_spec in turns:
             events_start = len(usage_events)
             timeout_cancelled = False

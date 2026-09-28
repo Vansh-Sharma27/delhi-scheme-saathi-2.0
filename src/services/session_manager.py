@@ -3,6 +3,7 @@
 import logging
 from datetime import UTC, datetime
 
+from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import SessionStore
 from src.dss.infrastructure.sessions.session_store import get_session_store
 from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
@@ -14,6 +15,7 @@ async def get_or_create_session(
     user_id: str,
     *,
     store: SessionStore | None = None,
+    clock: Clock | None = None,
 ) -> Session:
     """Get an existing session or create one in the supplied store."""
     store = store or get_session_store()
@@ -24,13 +26,13 @@ async def get_or_create_session(
             user_id=user_id,
             state=ConversationState.GREETING,
             user_profile=UserProfile(),
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
-        )
+            created_at=clock.now() if clock is not None else datetime.now(UTC),
+            updated_at=clock.now() if clock is not None else datetime.now(UTC),
+        ).with_clock(clock)
         await store.save(session)
         logger.info("Created new session for user %s", user_id)
 
-    return session
+    return session.with_clock(clock) if clock is not None else session
 
 
 async def save_session(
@@ -80,7 +82,6 @@ def add_discussed_scheme(session: Session, scheme_id: str) -> Session:
         discussed.append(scheme_id)
         return session.copy_with(
             discussed_schemes=discussed,
-            updated_at=datetime.now(UTC),
         )
     return session
 
@@ -90,15 +91,13 @@ def select_scheme(session: Session, scheme_id: str) -> Session:
     session = add_discussed_scheme(session, scheme_id)
     return session.copy_with(
         selected_scheme_id=scheme_id,
-        updated_at=datetime.now(UTC),
     )
 
 
 def set_language(session: Session, language: str, locked: bool | None = None) -> Session:
     """Set language preference."""
-    updates = {
+    updates: dict[str, str | bool] = {
         "language_preference": language,
-        "updated_at": datetime.now(UTC),
     }
     if locked is not None:
         updates["language_locked"] = locked
@@ -109,7 +108,6 @@ def set_currently_asking(session: Session, field: str | None) -> Session:
     """Update which field is being asked in the current flow."""
     return session.copy_with(
         currently_asking=field,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -117,7 +115,6 @@ def set_skipped_fields(session: Session, skipped_fields: list[str]) -> Session:
     """Persist skipped profile fields."""
     return session.copy_with(
         skipped_fields=list(skipped_fields),
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -128,7 +125,6 @@ def set_presented_schemes(
     """Persist the last scheme list shown to the user."""
     return session.copy_with(
         presented_schemes=presented_schemes,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -136,7 +132,6 @@ def set_awaiting_profile_change(session: Session, awaiting: bool) -> Session:
     """Track whether matching should wait for meaningful profile changes."""
     return session.copy_with(
         awaiting_profile_change=awaiting,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -144,7 +139,6 @@ def clear_selection(session: Session) -> Session:
     """Clear the currently selected scheme."""
     return session.copy_with(
         selected_scheme_id=None,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -164,7 +158,6 @@ def mark_turn_completed(session: Session) -> Session:
     """Increment completed turns after a full user-assistant exchange."""
     return session.copy_with(
         completed_turn_count=session.completed_turn_count + 1,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -172,7 +165,6 @@ def set_pending_memory_job(session: Session, pending: bool) -> Session:
     """Track whether a working-memory refresh job is already queued."""
     return session.copy_with(
         pending_memory_job=pending,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -191,7 +183,6 @@ def apply_working_memory(
             else session.completed_turn_count
         ),
         pending_memory_job=False,
-        updated_at=datetime.now(UTC),
     )
 
 
@@ -206,5 +197,5 @@ def reset_session(session: Session, preserve_language: bool = True) -> Session:
         language_preference=language_preference,
         language_locked=language_locked,
         created_at=session.created_at,
-        updated_at=datetime.now(UTC),
-    )
+        updated_at=session.now(),
+    ).with_clock(session.clock)

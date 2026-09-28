@@ -18,6 +18,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 
 from src.config import get_settings
+from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.work_queue import (
     AIWorkItem as AIWorkItem,
 )
@@ -68,7 +69,9 @@ def create_default_ai_work_queue() -> AIWorkQueue | None:
     return InMemoryAIWorkQueue()
 
 
-async def enqueue_memory_refresh(user_id: str, turn_count: int) -> bool:
+async def enqueue_memory_refresh(
+    user_id: str, turn_count: int, *, clock: Clock | None = None
+) -> bool:
     """Enqueue a working-memory refresh for a session."""
     queue = get_ai_work_queue()
     if queue is None:
@@ -78,12 +81,13 @@ async def enqueue_memory_refresh(user_id: str, turn_count: int) -> bool:
             work_type=AIWorkType.REFRESH_WORKING_MEMORY,
             user_id=user_id,
             turn_count=turn_count,
+            enqueued_at=clock.now() if clock is not None else datetime.now(UTC),
         )
     )
     return True
 
 
-async def process_work_item(item: AIWorkItem) -> None:
+async def process_work_item(item: AIWorkItem, *, clock: Clock | None = None) -> None:
     """Execute a background AI work item."""
     from src.services import session_manager
     from src.services.ai_orchestrator import get_ai_orchestrator
@@ -96,9 +100,11 @@ async def process_work_item(item: AIWorkItem) -> None:
         return
     if not session.pending_memory_job:
         return
+    if clock is not None:
+        session.with_clock(clock)
     queue_lag_ms = max(
         0.0,
-        (datetime.now(UTC) - item.enqueued_at).total_seconds() * 1000,
+        ((clock.now() if clock is not None else datetime.now(UTC)) - item.enqueued_at).total_seconds() * 1000,
     )
 
     try:

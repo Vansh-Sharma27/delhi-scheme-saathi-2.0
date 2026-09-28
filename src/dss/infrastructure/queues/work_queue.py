@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 import boto3
 
+from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.work_queue import (
     AIWorkItem as AIWorkItem,
 )
@@ -114,13 +115,14 @@ def deserialize_work_item(
     payload: dict[str, object],
     *,
     receipt_handle: str | None = None,
+    clock: Clock | None = None,
 ) -> AIWorkItem:
     """Deserialize a queue payload into a typed work item."""
     enqueued_at_raw = payload.get("enqueued_at")
     if isinstance(enqueued_at_raw, str):
         enqueued_at = datetime.fromisoformat(enqueued_at_raw)
     else:
-        enqueued_at = datetime.now(UTC)
+        enqueued_at = clock.now() if clock is not None else datetime.now(UTC)
 
     return AIWorkItem(
         work_type=AIWorkType(str(payload["work_type"])),

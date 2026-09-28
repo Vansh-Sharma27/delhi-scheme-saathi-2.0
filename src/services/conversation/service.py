@@ -25,6 +25,7 @@ import asyncpg
 
 from src.config import get_settings
 from src.db.session_store import SessionStore
+from src.dss.application.ports.clock import Clock
 from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
 from src.models.api import ChatRequest, ChatResponse
 from src.models.scheme import SchemeMatch
@@ -121,11 +122,13 @@ class ConversationService:
         *,
         ai_orchestrator: AIOrchestrator | None = None,
         session_store: SessionStore | None = None,
+        clock: Clock | None = None,
     ) -> None:
         self.pool = db_pool
         self.settings = get_settings()
         self.ai = ai_orchestrator or get_ai_orchestrator()
         self.session_store = session_store
+        self.clock = clock
         # Keep the raw client reachable for existing tests and narrow mocks.
         self.llm = self.ai.llm_client
 
@@ -138,6 +141,7 @@ class ConversationService:
         session = await session_manager.get_or_create_session(
             request.user_id,
             store=self.session_store,
+            clock=self.clock,
         )
 
         # Telegram callback queries legitimately carry an empty message body;
@@ -1519,7 +1523,9 @@ class ConversationService:
         if not refresh_due:
             return session
 
-        if await enqueue_memory_refresh(session.user_id, session.completed_turn_count):
+        if await enqueue_memory_refresh(
+            session.user_id, session.completed_turn_count, clock=self.clock
+        ):
             return session
 
         # The job never made it onto the queue, so clear the marker; leaving it
