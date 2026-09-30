@@ -12,6 +12,7 @@ from src.dss.domain.schemes.scheme import Scheme
 from src.dss.infrastructure.database.scheme_codec import scheme_from_row
 from src.dss.infrastructure.sessions.codec import session_from_item
 from src.models import session
+from src.models.api import SchemeDetailResponse
 from src.models.scheme import Scheme as LegacyScheme
 from src.utils.scheme_catalog import _load_catalog, get_required_profile_fields_for_life_event
 
@@ -56,8 +57,14 @@ def test_legacy_profile_and_session_copies_keep_helpers() -> None:
     assert type(merged) is session.UserProfile
     assert merged.required_fields_for_matching() == ("life_event", "age", "annual_income")
     assert session.ConversationState is ConversationState
+    updated = legacy.with_profile(UserProfile(life_event="HOUSING", age=40, annual_income=100000))
+    assert type(updated) is session.Session
+    assert type(updated.user_profile) is session.UserProfile
+    assert updated.user_profile.age == 40
 
 
 def test_scheme_codec_matches_legacy_hydration() -> None:
     row = {"id": "SCH-DELHI-001", "name": "Synthetic", "name_hindi": "Synthetic", "department": "Synthetic", "department_hindi": "Synthetic", "level": "state", "description": "Synthetic", "description_hindi": "Synthetic", "eligibility": '{"categories": ["EWS", "LIG"]}', "helpline": '{"phone": ["100", "200"]}', "metadata": '{"synthetic": true}', "life_events": ["STALE"], "tags": ["STALE"]}
     assert scheme_from_row(Scheme, row).model_dump() == LegacyScheme.from_db_row(row).model_dump()
+    hydrated = scheme_from_row(Scheme, row)
+    assert SchemeDetailResponse(scheme=hydrated).scheme is hydrated

@@ -37,6 +37,12 @@ class Session(DomainSession):
 
     user_profile: UserProfile = Field(default_factory=UserProfile)
 
+    def copy_with(self, **updates: Any) -> Self:
+        profile = updates.get("user_profile")
+        if isinstance(profile, DomainProfile):
+            updates["user_profile"] = profile.model_dump()
+        return super().copy_with(**updates)
+
     @classmethod
     def from_dynamodb_item(
         cls, item: dict[str, Any], *, clock: Clock | None = None
