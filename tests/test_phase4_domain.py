@@ -9,6 +9,7 @@ from src.dss.domain.profiles.required_fields import required_profile_fields
 from src.dss.domain.schemes.document import Document
 from src.dss.domain.schemes.office import Office
 from src.dss.domain.schemes.scheme import Scheme
+from src.dss.infrastructure.sessions.codec import session_from_item
 from src.models import session
 from src.utils.scheme_catalog import _load_catalog, get_required_profile_fields_for_life_event
 
@@ -34,3 +35,11 @@ def test_pure_required_fields_matches_catalog_policy() -> None:
     for event in [None, "UNKNOWN", *sorted(events)]:
         assert required_profile_fields(event, catalog.values()) == get_required_profile_fields_for_life_event(event)
     assert required_profile_fields("SYNTHETIC", [{"life_events": ["SYNTHETIC"], "eligibility": {"genders": ["female"], "categories": ["SC"]}}]) == ("life_event", "age", "annual_income", "gender", "category")
+
+
+def test_session_codec_matches_legacy_repair() -> None:
+    original = Session(user_id="synthetic").to_dynamodb_item()
+    for state in [None, "UNKNOWN", "UNDERSTANDING", "MATCHING", "PRESENTING", "DETAILS", "APPLICATION", "HANDOFF", *[s.value for s in ConversationState]]:
+        for profile in [{}, {"life_event": "HOUSING"}]:
+            item = {**original, "state": state, "user_profile": profile}
+            assert session_from_item(Session, item).model_dump() == Session.from_dynamodb_item(item).model_dump()
