@@ -186,9 +186,6 @@ allow_indirect_imports = false
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
     "src.dss.infrastructure.database.catalog -> src.utils.scheme_catalog",
-    "src.dss.domain.profiles.profile -> src.models.session",
-    "src.dss.domain.conversations.session -> src.models.session",
-    "src.dss.domain.conversations.states -> src.models.session",
     "src.dss.domain.schemes.scheme -> src.models.scheme",
     "src.dss.domain.schemes.document -> src.models.document",
     "src.dss.domain.schemes.office -> src.models.office",

@@ -871,7 +871,7 @@ class ConversationService:
             session = session_manager.set_currently_asking(session, "life_event")
             return RenderResult(session, ConversationState.SITUATION_UNDERSTANDING, text)
 
-        if profile.is_complete_for_matching:
+        if profile_extractor.is_complete_for_matching(profile):
             outcome = await self._run_matching(profile, user_message, session, lang)
             return RenderResult(
                 outcome.session,
@@ -917,7 +917,7 @@ class ConversationService:
         no_new_matches_possible = (
             session.awaiting_profile_change
             and not profile_update.profile_changed
-            and profile.is_complete_for_matching
+            and profile_extractor.is_complete_for_matching(profile)
         )
 
         if analysis.action in {"ask_field_reason", "clarify_field"} and previously_asking:

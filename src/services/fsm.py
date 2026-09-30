@@ -3,6 +3,7 @@
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 from src.dss.domain.profiles.profile import UserProfile
+from src.services import profile_extractor
 
 
 class FSMTransitionError(Exception):
@@ -104,7 +105,7 @@ def transition(session: Session, target: ConversationState) -> Session:
 
 def should_auto_match(profile: UserProfile) -> bool:
     """Check if profile has enough info to trigger matching."""
-    return profile.is_complete_for_matching
+    return profile_extractor.is_complete_for_matching(profile)
 
 
 def determine_next_state(

@@ -23,7 +23,7 @@ def test_expanded_models_work() -> None:
     current = Session(user_id="synthetic", user_profile=profile)
     assert current.with_state(ConversationState.MATCHING).state is ConversationState.SCHEME_MATCHING
     assert current.user_profile.model_dump() == profile.model_dump()
-    assert Session is session.Session
+    assert issubclass(session.Session, Session)
     assert Scheme.model_fields["is_active"].default is True
     assert Document.model_fields["prerequisites"].default_factory is list
     assert Office.model_fields["distance_km"].default is None
@@ -42,4 +42,15 @@ def test_session_codec_matches_legacy_repair() -> None:
     for state in [None, "UNKNOWN", "UNDERSTANDING", "MATCHING", "PRESENTING", "DETAILS", "APPLICATION", "HANDOFF", *[s.value for s in ConversationState]]:
         for profile in [{}, {"life_event": "HOUSING"}]:
             item = {**original, "state": state, "user_profile": profile}
-            assert session_from_item(Session, item).model_dump() == Session.from_dynamodb_item(item).model_dump()
+            assert session_from_item(Session, item).model_dump() == session.Session.from_dynamodb_item(item).model_dump()
+
+
+def test_legacy_profile_and_session_copies_keep_helpers() -> None:
+    legacy = session.Session(user_id="synthetic", user_profile={"life_event": "HOUSING", "age": 30, "annual_income": 100000})
+    copied = legacy.copy_with()
+    assert type(copied) is session.Session
+    assert copied.user_profile.is_complete_for_matching is True
+    merged = copied.user_profile.merge_with(session.UserProfile(gender="female"))
+    assert type(merged) is session.UserProfile
+    assert merged.required_fields_for_matching() == ("life_event", "age", "annual_income")
+    assert session.ConversationState is ConversationState
