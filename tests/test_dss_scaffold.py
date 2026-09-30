@@ -34,6 +34,7 @@ DSS_LAYER_PACKAGES: list[str] = [
     "src.dss.infrastructure",
     "src.dss.infrastructure.database",
     "src.dss.infrastructure.ai",
+    "src.dss.infrastructure.ai.prompts",
     "src.dss.infrastructure.embeddings",
     "src.dss.infrastructure.speech",
     "src.dss.infrastructure.sessions",
@@ -72,5 +73,7 @@ def test_dss_layer_package_count() -> None:
 
     If a phase adds or removes a package, the count changes and this test
     forces a deliberate edit to the list above, which a reviewer sees.
+    Phase 3 added src.dss.infrastructure.ai.prompts (spec 7.4): the prompt
+    loader and the .txt templates move together into infrastructure/ai.
     """
-    assert len(DSS_LAYER_PACKAGES) == 23
+    assert len(DSS_LAYER_PACKAGES) == 24

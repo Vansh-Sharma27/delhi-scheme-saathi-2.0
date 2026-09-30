@@ -1,11 +1,9 @@
 ﻿"""Port: time source.
 
-Introduces a clock abstraction so session expiry, memory-refresh lag, and
-the DynamoDB TTL computation in `Session.to_dynamodb_item` can be made
-deterministic in tests (spec 6.1). Today those paths call `datetime.now(UTC)`
-directly. Phase 2 defines the port and a fake; Phase 3 threads an injected
-clock through the session helpers, which is the behavioural change the spec
-flags as needing deliberate golden regeneration (spec Phase 3 caution).
+Session helpers and background work accept this time source in Phase 3.
+DynamoDB TTL remains derived from the session's updated_at plus seven days;
+it does not read the current time. Injecting the clock makes timestamp updates
+and memory-refresh lag deterministic without changing that expiry rule.
 
 The port returns a timezone-aware datetime. An adapter wrapping
 `datetime.now(UTC)` is the production implementation and lands in Phase 3.

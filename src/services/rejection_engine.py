@@ -4,7 +4,7 @@ import logging
 
 import asyncpg
 
-from src.db.rejection_rule_repo import get_rules_by_scheme
+from src.dss.infrastructure.database.rejection_rule_repo import get_rules_by_scheme
 from src.models.rejection_rule import RejectionRule
 from src.models.session import UserProfile
 
