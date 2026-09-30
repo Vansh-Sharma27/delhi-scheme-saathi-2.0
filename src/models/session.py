@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, PrivateAttr
 
-from src.dss.application.ports.clock import Clock
+from src.dss.domain.conversations.clock import Clock
 from src.utils.scheme_catalog import get_required_profile_fields_for_life_event
 
 
