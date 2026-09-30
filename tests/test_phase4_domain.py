@@ -9,6 +9,7 @@ from src.dss.domain.profiles.required_fields import required_profile_fields
 from src.dss.domain.schemes.document import Document
 from src.dss.domain.schemes.office import Office
 from src.dss.domain.schemes.scheme import Scheme
+from src.dss.infrastructure.database.scheme_codec import scheme_from_row
 from src.dss.infrastructure.sessions.codec import session_from_item
 from src.models import session
 from src.utils.scheme_catalog import _load_catalog, get_required_profile_fields_for_life_event
@@ -54,3 +55,8 @@ def test_legacy_profile_and_session_copies_keep_helpers() -> None:
     assert type(merged) is session.UserProfile
     assert merged.required_fields_for_matching() == ("life_event", "age", "annual_income")
     assert session.ConversationState is ConversationState
+
+
+def test_scheme_codec_matches_legacy_hydration() -> None:
+    row = {"id": "SCH-DELHI-001", "name": "Synthetic", "name_hindi": "Synthetic", "department": "Synthetic", "department_hindi": "Synthetic", "level": "state", "description": "Synthetic", "description_hindi": "Synthetic", "eligibility": '{"categories": ["EWS", "LIG"]}', "helpline": '{"phone": ["100", "200"]}', "metadata": '{"synthetic": true}', "life_events": ["STALE"], "tags": ["STALE"]}
+    assert scheme_from_row(Scheme, row).model_dump() == Scheme.from_db_row(row).model_dump()
