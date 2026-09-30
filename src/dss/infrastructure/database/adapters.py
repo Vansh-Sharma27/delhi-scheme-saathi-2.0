@@ -9,11 +9,8 @@ text, ordering, or fallback changed. The application layer can now depend on
 the ports; Phase 5 threads these adapters through the service constructors
 and Phase 6 wires them in the composition root.
 
-The domain types (``Scheme``, ``SchemeMatch``, ``UserProfile``, ``Document``,
-``Office``, ``RejectionRule``) still live in the legacy ``src.models`` tree
-until Phase 4 and are referenced only under ``if TYPE_CHECKING:``, matching
-the ports' own pattern, so the import-linter graph records no runtime
-dependency on the legacy tree.
+The adapters and ports import canonical domain values directly. Raw scheme
+retrieval delegates independently of the legacy evaluated search method.
 
 ``haversine_distance`` stays on the office repo module: it is a pure helper
 of the in-Python distance sort, not part of any port.
@@ -21,7 +18,7 @@ of the in-Python distance sort, not part of any port.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import asyncpg
 
@@ -29,19 +26,17 @@ from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
 from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.document import Document
+from src.dss.domain.schemes.office import Office
+from src.dss.domain.schemes.rejection_rule import RejectionRule
+from src.dss.domain.schemes.scheme import Scheme, SchemeCandidate, SchemeMatch
 from src.dss.infrastructure.database import (
     document_repo,
     office_repo,
     rejection_rule_repo,
     scheme_repo,
 )
-
-if TYPE_CHECKING:
-    from src.dss.domain.schemes.rejection_rule import RejectionRule
-    from src.models.document import Document
-    from src.models.office import Office
-    from src.models.scheme import Scheme, SchemeMatch
-    from src.models.session import UserProfile
 
 
 class PostgresSchemeRepository(SchemeRepository):
@@ -83,6 +78,17 @@ class PostgresSchemeRepository(SchemeRepository):
     ) -> list[Scheme]:
         return await scheme_repo.search_schemes_by_text(
             self._pool, search_text, limit
+        )
+
+    async def retrieve_candidates(
+        self,
+        life_event: str | None,
+        profile: UserProfile,
+        query_embedding: list[float] | None = None,
+        limit: int = 5,
+    ) -> list[SchemeCandidate]:
+        return await scheme_repo.retrieve_candidates(
+            self._pool, life_event, profile, query_embedding, limit
         )
 
     async def get_scheme_debug_rows(

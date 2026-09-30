@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.models.session import ConversationMemory, Session
+from src.dss.domain.conversations.session import ConversationMemory, Session
 
 
 def _format_income(income: int) -> str:

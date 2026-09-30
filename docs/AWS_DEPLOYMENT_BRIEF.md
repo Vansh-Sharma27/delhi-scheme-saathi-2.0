@@ -2,6 +2,10 @@
 
 Last updated: 2026-03-05 18:00 UTC
 
+## Historical scope
+
+This is a dated deployment record from the original repository, not the current deployment state or a current execution checklist. The endpoint, resource identifiers, test count, and paths below describe that session only. They have not been reverified against AWS during the modular-monolith migration. The current repository is `delhi-scheme-saathi-2.0`; package ownership and known limitations are in [ARCHITECTURE.md](ARCHITECTURE.md). Provider/model paths, profile completeness policy, and working-memory wiring have changed since this record. Remote resource changes, deployment, session deletion, and webhook changes require explicit authorization.
+
 ## 1) Goal
 
 Deploy `delhi-scheme-saathi` on AWS with:
@@ -115,7 +119,7 @@ Deploy `delhi-scheme-saathi` on AWS with:
 - `src/integrations/grok_client.py`: safe JSON serialization and proper exception re-raise for fallback handling.
 - `src/integrations/embedding_client.py` + `src/services/scheme_matcher.py`:
   - safer fallback behavior when embeddings fail/unavailable.
-- `src/services/session_manager.py` + `src/services/conversation.py`:
+- `src/services/session_manager.py` + `src/services/conversation/` (a single module at the time):
   - user-only analysis history
   - deterministic extraction and life-event fallback
   - explicit full session reset on goodbye
@@ -140,7 +144,7 @@ Deploy `delhi-scheme-saathi` on AWS with:
 
 ## 4) Testing Status
 
-Local test status (latest run):
+Local test status recorded on 2026-03-05:
 - `pytest -q` -> **89 passed**
 
 Added/updated tests cover:
@@ -162,7 +166,7 @@ As last verified during deployment/testing:
   - `{"status":"ok","database":"connected","schemes_count":5}`
 - Telegram webhook endpoint was configured and receiving updates.
 
-Current immediate status at pause/resume point:
+Recorded status at the 2026-03-05 pause/resume point:
 - RDS had been stopped to save cost.
 - On resume, `aws rds start-db-instance` initially failed due expired SSO token.
 - Next required step: re-login with SSO, then start/wait for DB availability.

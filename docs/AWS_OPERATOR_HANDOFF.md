@@ -2,11 +2,15 @@
 
 Last updated: 2026-03-05 UTC
 
+## Historical scope
+
+This handoff records the original repository's March deployment session. Resource identifiers, endpoint, paths, and the 89-test result are historical and have not been checked against current AWS state. Use [ARCHITECTURE.md](ARCHITECTURE.md) for the current implementation and [QUICKSTART.md](QUICKSTART.md) for local setup. The commands below modify live infrastructure or webhook state and are not migration validation steps; run them only with explicit authorization.
+
 ## Purpose
 
-Use this checklist to resume deployment/testing quickly and safely.
+Retain the deployment context from the dated session; verify resource state and current configuration before reusing any command.
 
-## Current State
+## Recorded State
 
 - AWS profile: `delhi-sso` (SSO-based)
 - Region: `ap-south-1`

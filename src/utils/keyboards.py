@@ -7,7 +7,7 @@ out by ``ConversationService._handle_callback``:
 - ``lang:<hi|en|hinglish>`` — switch response language
 """
 
-from src.models.scheme import SchemeMatch
+from src.dss.domain.schemes.scheme import SchemeMatch
 
 # Telegram wraps long button labels onto several lines and truncates them
 # unpredictably on narrow screens, so labels are shortened up front.

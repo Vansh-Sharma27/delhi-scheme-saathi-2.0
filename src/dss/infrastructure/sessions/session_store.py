@@ -13,8 +13,9 @@ from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import (
     SessionStore as SessionStore,
 )
+from src.dss.domain.conversations.session import Session
 from src.dss.infrastructure.sessions.clock import SystemClock
-from src.models.session import Session
+from src.dss.infrastructure.sessions.codec import session_from_item
 
 
 class InMemorySessionStore:
@@ -68,7 +69,7 @@ class DynamoDBSessionStore:
 
         item = await asyncio.get_running_loop().run_in_executor(None, _get)
         if item:
-            return Session.from_dynamodb_item(item, clock=self._clock)
+            return session_from_item(Session, item, clock=self._clock)
         return None
 
     async def save(self, session: Session) -> None:

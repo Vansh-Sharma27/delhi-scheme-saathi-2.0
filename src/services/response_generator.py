@@ -4,11 +4,12 @@ import logging
 import re
 from typing import Any
 
-from src.db import scheme_repo
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import Scheme
 from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.infrastructure.ai.prompts.loader import get_generate_response_prompt
-from src.models.scheme import Scheme
-from src.models.session import Session, UserProfile
 from src.services.ai_orchestrator import get_ai_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -865,7 +866,7 @@ def _maybe_generate_eligibility_response(
         return None
 
     elig = scheme.eligibility
-    match = scheme_repo.calculate_eligibility_match(scheme, profile)
+    match = calculate_eligibility_match(scheme, profile)
 
     failed_fields: list[str] = []
     missing_fields: list[str] = []
@@ -1022,7 +1023,7 @@ def _build_matching_reason_context(scheme: Scheme, profile: UserProfile) -> list
     """Collect grounded reasons the scheme could fit the current profile."""
     reasons: list[str] = []
     elig = scheme.eligibility
-    eligibility_match = scheme_repo.calculate_eligibility_match(scheme, profile)
+    eligibility_match = calculate_eligibility_match(scheme, profile)
     scheme_text = " ".join(
         [
             scheme.name,

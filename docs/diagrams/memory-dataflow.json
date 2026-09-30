@@ -1,0 +1,25 @@
+{
+  "schema_version": 1, "diagram_type": "dataflow",
+  "meta": {"title": "Delhi Scheme Saathi · Working Memory Data Flow", "output": "docs/diagrams/memory-dataflow.html", "quality_profile": "showcase", "locale": "en", "viewBox": [1080, 520], "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "stages": [{"label": "Foreground save"}, {"label": "Conditional job"}, {"label": "Worker hydration"}, {"label": "Memory transform"}, {"label": "Whole-item write"}],
+  "nodes": [
+    {"id": "completed", "type": "backend", "label": "Completed turn", "sublabel": "12 messages + turn count", "stage": 0, "row": 1, "width": 150, "sources": [{"path": "src/services/conversation/service.py", "line": 1503, "end_line": 1542}]},
+    {"id": "queue", "type": "messagebus", "label": "Refresh job", "sublabel": "User ID + turn + time", "stage": 1, "row": 1, "width": 155, "sources": [{"path": "src/services/ai_background.py", "line": 72, "end_line": 87}, {"path": "src/dss/infrastructure/queues/work_queue.py", "line": 104, "end_line": 111}]},
+    {"id": "hydrate", "type": "backend", "label": "Worker reads", "sublabel": "Latest stored session", "stage": 2, "row": 1, "width": 155, "sources": [{"path": "src/services/ai_background.py", "line": 90, "end_line": 108}]},
+    {"id": "session", "type": "database", "label": "Session store", "sublabel": "Profile + messages + memory", "stage": 2, "row": 0, "width": 155, "sources": [{"path": "src/dss/infrastructure/sessions/session_store.py", "line": 27, "end_line": 36}, {"path": "src/dss/infrastructure/sessions/session_store.py", "line": 59, "end_line": 84}]},
+    {"id": "memory", "type": "cloud", "label": "Memory refresh", "sublabel": "Summary + profile facts", "stage": 3, "row": 1, "width": 155, "sources": [{"path": "src/services/ai_orchestrator.py", "line": 343, "end_line": 393}, {"path": "src/services/conversation_memory.py", "line": 39, "end_line": 62}]},
+    {"id": "write", "type": "database", "label": "Updated session", "sublabel": "Memory + pending cleared", "stage": 4, "row": 1, "width": 155, "sources": [{"path": "src/services/ai_background.py", "line": 110, "end_line": 132}, {"path": "src/services/session_manager.py", "line": 173, "end_line": 188}]}
+  ],
+  "flows": [
+    {"id": "enqueue", "from": "completed", "to": "queue", "label": "if due", "classification": "reference only", "variant": "dashed", "route": "straight", "labelAt": [207, 315]},
+    {"id": "consume", "from": "queue", "to": "hydrate", "label": "job", "classification": "local or SQS", "variant": "dashed", "route": "straight", "labelAt": [423, 315]},
+    {"id": "load", "from": "session", "to": "hydrate", "label": "session", "classification": "personal data", "variant": "security", "route": "straight", "labelAt": [580, 215]},
+    {"id": "context", "from": "hydrate", "to": "memory", "label": "context", "classification": "AI prompt", "variant": "security", "route": "straight", "labelAt": [638, 315]},
+    {"id": "save", "from": "memory", "to": "write", "label": "save", "classification": "whole session", "variant": "emphasis", "route": "straight", "labelAt": [853, 315]}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Enqueue gate", "items": ["Refresh is due after eight turns or approximately 6000 estimated context tokens by default, unless a job is already pending.", "Foreground saves the session with pending=true before enqueue. An unavailable queue clears the marker and saves again."]},
+    {"dot": "amber", "title": "Worker gate and result", "items": ["Worker skips absent sessions, unsupported work types and pending=false.", "20s orchestration bounds the AI summary; deterministic facts and active-scheme/pending-action context are assembled from session values.", "The job's turn count does not make the background write conflict-safe."]},
+    {"dot": "rose", "title": "Persistence and retries", "items": ["The diagram's final node is another write to the configured session store, not a second physical store.", "Refresh exceptions clear pending state; save/decode failures can reach SQS batch failure reporting.", "Local queue acknowledgement runs in finally. Lambda returns batchItemFailures for failed records.", "No version condition or field-only background update protects foreground writes."]}
+  ]
+}

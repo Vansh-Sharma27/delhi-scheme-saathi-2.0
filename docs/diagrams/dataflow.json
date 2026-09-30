@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {"title": "Delhi Scheme Saathi · Scheme Data Lineage", "output": "docs/diagrams/dataflow.html", "quality_profile": "showcase", "locale": "en", "viewBox": [1080, 650], "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "stages": [{"label": "Bundled sources"}, {"label": "Load and persist"}, {"label": "Read candidates"}, {"label": "Evaluate facts"}, {"label": "Use results"}],
+  "nodes": [
+    {"id": "json", "type": "database", "label": "Bundled JSON", "sublabel": "Schemes + guidance", "stage": 0, "row": 1, "width": 150, "sources": [{"path": "scripts/seed_data.py", "line": 48, "end_line": 54}, {"path": "src/dss/infrastructure/database/catalog.py", "line": 13, "end_line": 36}]},
+    {"id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "JSONB + vector(1024)", "stage": 1, "row": 1, "width": 175, "sources": [{"path": "scripts/seed_data.py", "line": 62, "end_line": 126}, {"path": "scripts/init-db/01-schema.sql", "line": 8, "end_line": 37}]},
+    {"id": "catalog", "type": "backend", "label": "Catalog loader", "sublabel": "Cached public metadata", "stage": 1, "row": 0, "width": 175, "sources": [{"path": "src/dss/infrastructure/database/catalog.py", "line": 16, "end_line": 73}]},
+    {"id": "raw", "type": "backend", "label": "Raw candidates", "sublabel": "Scheme + similarity", "stage": 2, "row": 1, "width": 175, "sources": [{"path": "src/dss/infrastructure/database/scheme_repo.py", "line": 91, "end_line": 171}, {"path": "src/dss/infrastructure/database/scheme_codec.py", "line": 12, "end_line": 47}]},
+    {"id": "profile", "type": "frontend", "label": "Profile values", "sublabel": "Extracted + validated", "stage": 2, "row": 2, "width": 175, "sources": [{"path": "src/services/conversation/service.py", "line": 648, "end_line": 680}, {"path": "src/dss/domain/profiles/profile.py", "line": 12, "end_line": 27}]},
+    {"id": "facts", "type": "backend", "label": "Eligibility facts", "sublabel": "Existing evaluated fields", "stage": 3, "row": 1, "width": 175, "sources": [{"path": "src/dss/domain/eligibility/evaluator.py", "line": 50, "end_line": 99}]},
+    {"id": "fields", "type": "backend", "label": "Required fields", "sublabel": "Pure catalog-value policy", "stage": 3, "row": 0, "width": 175, "sources": [{"path": "src/dss/domain/profiles/required_fields.py", "line": 9, "end_line": 61}]},
+    {"id": "rank", "type": "frontend", "label": "Matched schemes", "sublabel": "Filter · rank · truncate", "stage": 4, "row": 1, "width": 175, "sources": [{"path": "src/services/scheme_matcher.py", "line": 80, "end_line": 126}]},
+    {"id": "collect", "type": "frontend", "label": "Profile questions", "sublabel": "Relevant missing fields", "stage": 4, "row": 0, "width": 175, "sources": [{"path": "src/services/profile_extractor.py", "line": 32, "end_line": 43}]}
+  ],
+  "flows": [
+    {"id": "seed", "from": "json", "to": "postgres", "label": "seed", "classification": "public data", "variant": "emphasis", "route": "straight", "labelAt": [201, 320]},
+    {"id": "load", "from": "json", "to": "catalog", "label": "load", "classification": "metadata", "fromSide": "top", "toSide": "left", "via": [[100, 207], [201, 207], [201, 157]], "labelAt": [150, 195]},
+    {"id": "read", "from": "postgres", "to": "raw", "label": "SQL", "classification": "retrieved", "variant": "emphasis", "route": "straight", "labelAt": [423, 320]},
+    {"id": "override", "from": "catalog", "to": "raw", "label": "tags", "classification": "precedence", "fromSide": "bottom", "toSide": "top", "via": [[315, 207], [530, 207]], "labelAt": [450, 201]},
+    {"id": "candidates", "from": "raw", "to": "facts", "label": "rules", "classification": "public rules", "variant": "emphasis", "route": "straight", "labelAt": [638, 222]},
+    {"id": "personal", "from": "profile", "to": "facts", "label": "profile", "classification": "personal values", "variant": "security", "fromSide": "right", "toSide": "bottom", "via": [[745, 385]], "labelAt": [680, 425]},
+    {"id": "policy-values", "from": "catalog", "to": "fields", "label": "catalog values", "classification": "no domain I/O", "route": "straight", "labelAt": [530, 108]},
+    {"id": "matched", "from": "facts", "to": "rank", "label": "facts", "classification": "partial checks", "variant": "emphasis", "route": "straight", "labelAt": [853, 320]},
+    {"id": "questions", "from": "fields", "to": "collect", "label": "fields", "classification": "collection policy", "route": "straight", "labelAt": [853, 108]}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Infrastructure supplies data", "items": ["Domain policy receives values; it never reads catalog files or legacy utilities.", "Canonical life events and tags override stale database metadata during hydration."]},
+    {"dot": "rose", "title": "Facts have limits", "items": ["Only age, gender, caste category and income dimensions are evaluated.", "Seed last_verified currently comes from the database default, not preserved source provenance.", "Catalog metadata is not a database-outage replacement."]}
+  ]
+}

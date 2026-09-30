@@ -1,6 +1,6 @@
 # Delhi Scheme Saathi - Scheme Data
 
-Production-ready seed data for Delhi Scheme Saathi, covering 5 government welfare schemes for Delhi residents.
+Bundled seed data for Delhi Scheme Saathi, covering five government welfare schemes for Delhi residents. Source links and recorded verification dates do not establish that the rules are current today.
 
 ## Schemes Included
 
@@ -33,7 +33,7 @@ data/
 
 ## Data Verification
 
-All scheme data has been verified against official government sources:
+The catalog records these official source links:
 
 - **PMAY-U 2.0**: [pmay-urban.gov.in](https://pmay-urban.gov.in/)
 - **Widow Pension**: [wcd.delhi.gov.in](https://wcd.delhi.gov.in/)
@@ -41,7 +41,7 @@ All scheme data has been verified against official government sources:
 - **ELSD**: [dsfdc.delhi.gov.in](https://dsfdc.delhi.gov.in/)
 - **DAK**: [health.delhi.gov.in](https://health.delhi.gov.in/health/delhi-arogya-kosh)
 
-Last verified: 2026-02-28
+Recorded source-verification date: 2026-02-28. The seeder currently omits `last_verified`, so database defaults record insertion time rather than preserving that source date.
 
 ## Schema Overview
 
@@ -91,28 +91,18 @@ Schemes are categorized by life events using UPPERCASE keys:
 
 ## Generating Embeddings
 
-Embeddings are not included in the JSON files. Generate them using Voyage AI:
+Embeddings are not included in the JSON files. Use the existing Jina/Voyage provider script with the application environment. It currently requires `VOYAGE_API_KEY` before selecting the provider client.
 
-```python
-import voyageai
-
-vo = voyageai.Client(api_key="YOUR_API_KEY")
-
-# For each scheme
-text = f"{scheme['name']} {scheme['description']} {scheme['benefits_summary']}"
-result = vo.embed(texts=[text], model="voyage-multilingual-2", input_type="document")
-scheme['description_embedding'] = result.embeddings[0]  # 1024 dimensions
+```bash
+docker compose exec app python scripts/generate_embeddings.py
 ```
 
 ## Database Seeding
 
-See `/database/seed/schema.sql` for PostgreSQL table definitions with pgvector support.
+See `scripts/init-db/01-schema.sql` for PostgreSQL table definitions with pgvector support. Compose initializes this schema on a fresh database volume, and application startup seeds the bundled records when the schemes table is empty.
 
 ```bash
-# Create database
-psql -f schema.sql
-
-# Seed data using provided scripts or direct JSON import
+docker compose exec app python -m scripts.seed_data
 ```
 
 ## Key Data Points (Verified)

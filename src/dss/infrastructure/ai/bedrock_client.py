@@ -20,7 +20,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.config import get_settings
-from src.utils.scheme_catalog import get_required_profile_fields_for_life_event
+from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
 
 logger = logging.getLogger(__name__)
 

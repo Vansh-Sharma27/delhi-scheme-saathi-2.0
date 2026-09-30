@@ -9,7 +9,10 @@ newly detected life event overwrite the topic mid-collection.
 import re
 from typing import Any
 
-from src.models.session import ConversationState, Session, UserProfile
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.services import profile_extractor
 from src.services.conversation import intents, scheme_reference
 
 # Profile fields that feed the SQL eligibility filter or the semantic query.
@@ -117,7 +120,7 @@ def should_refresh_matches_after_profile_change(
     requested_state: ConversationState | None,
 ) -> bool:
     """Decide when updated profile facts should trigger a fresh scheme match."""
-    if not matching_inputs_changed or not profile.is_complete_for_matching:
+    if not matching_inputs_changed or not profile_extractor.is_complete_for_matching(profile):
         return False
     if session.state not in scheme_reference.SCHEME_CONTEXT_STATES:
         return False

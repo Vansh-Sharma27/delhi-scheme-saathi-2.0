@@ -10,7 +10,7 @@ import math
 
 import asyncpg
 
-from src.models.office import Office
+from src.dss.domain.schemes.office import Office
 
 
 def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:

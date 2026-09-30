@@ -8,7 +8,7 @@ repository ports live in ``src.dss.infrastructure.database.adapters``.
 
 import asyncpg
 
-from src.models.document import Document
+from src.dss.domain.schemes.document import Document
 
 
 async def get_document_by_id(pool: asyncpg.Pool, doc_id: str) -> Document | None:

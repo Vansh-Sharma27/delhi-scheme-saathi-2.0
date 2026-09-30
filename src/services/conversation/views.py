@@ -12,8 +12,10 @@ past that on its own.
 import asyncpg
 
 from src.db import office_repo, scheme_repo
-from src.models.scheme import EligibilityCriteria, SchemeMatch
-from src.models.session import Session, UserProfile
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import EligibilityCriteria, SchemeMatch
 from src.services import document_resolver, rejection_engine, response_generator
 from src.services.conversation.language import text_variant
 
@@ -306,7 +308,7 @@ async def build_scheme_details_text(
         elig_label = text_variant(language, "पात्रता", "Eligibility", "Eligibility")
         lines.append(f"✅ {elig_label}: {' | '.join(elig_parts)}")
 
-    match_details = scheme_repo.calculate_eligibility_match(scheme, profile)
+    match_details = calculate_eligibility_match(scheme, profile)
     if match_details:
         lines.append("")
         lines.append(

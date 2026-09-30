@@ -20,6 +20,7 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 from src.db.session_store import InMemorySessionStore, SessionStore
+from src.dss.domain.schemes.scheme import SchemeCandidate
 from src.models.api import ChatRequest, ChatResponse
 from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
 from src.models.session import Session
@@ -313,7 +314,15 @@ async def run_scenario(
             "src.services.scheme_matcher.get_embedding_client",
             return_value=fake_embedding_client,
         ),
-        patch("src.services.scheme_matcher.hybrid_search", new=fake_hybrid_search),
+        patch("src.services.scheme_matcher.retrieve_candidates", new=fake_hybrid_search),
+        # Golden scenarios supply evaluated facts; real evaluation is pinned separately.
+        patch(
+            "src.services.scheme_matcher.calculate_eligibility_match",
+            side_effect=lambda scheme, profile: next(
+                match.eligibility_match for match in turn_spec.match_result
+                if match.scheme is scheme
+            ),
+        ),
         patch(
             "src.services.conversation.views.scheme_repo.get_scheme_by_id",
             new=get_scheme_mock,
@@ -375,7 +384,10 @@ async def run_scenario(
                 )
             )
 
-            fake_hybrid_search.return_value = turn_spec.match_result
+            fake_hybrid_search.return_value = [
+                SchemeCandidate(scheme=match.scheme, similarity=match.similarity)
+                for match in turn_spec.match_result
+            ]
             if turn_spec.embedding_failure:
                 fake_embedding_client.get_embedding = AsyncMock(
                     side_effect=RuntimeError("embedding provider unavailable"),

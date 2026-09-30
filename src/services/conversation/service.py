@@ -26,10 +26,12 @@ import asyncpg
 from src.config import get_settings
 from src.db.session_store import SessionStore
 from src.dss.application.ports.clock import Clock
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
 from src.models.api import ChatRequest, ChatResponse
-from src.models.scheme import SchemeMatch
-from src.models.session import ConversationState, Session, UserProfile
 from src.services import (
     fsm,
     life_event_classifier,
@@ -869,7 +871,7 @@ class ConversationService:
             session = session_manager.set_currently_asking(session, "life_event")
             return RenderResult(session, ConversationState.SITUATION_UNDERSTANDING, text)
 
-        if profile.is_complete_for_matching:
+        if profile_extractor.is_complete_for_matching(profile):
             outcome = await self._run_matching(profile, user_message, session, lang)
             return RenderResult(
                 outcome.session,
@@ -915,7 +917,7 @@ class ConversationService:
         no_new_matches_possible = (
             session.awaiting_profile_change
             and not profile_update.profile_changed
-            and profile.is_complete_for_matching
+            and profile_extractor.is_complete_for_matching(profile)
         )
 
         if analysis.action in {"ask_field_reason", "clarify_field"} and previously_asking:

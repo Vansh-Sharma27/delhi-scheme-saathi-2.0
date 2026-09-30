@@ -4,10 +4,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.models.document import Document, DocumentChain
-from src.models.office import Office
-from src.models.rejection_rule import RejectionRule
-from src.models.scheme import Scheme, SchemeMatch
+from src.dss.domain.schemes.document import Document, DocumentChain
+from src.dss.domain.schemes.office import Office
+from src.dss.domain.schemes.rejection_rule import RejectionRule
+from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
 
 
 class SchemeDetailResponse(BaseModel):

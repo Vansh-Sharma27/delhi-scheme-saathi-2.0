@@ -22,7 +22,8 @@ files are not required to audit or run the controls below.
 3. **Exact fixtures**
    - Every `ChatResponse` field and every persisted `Session` field is recorded.
    - Fixture key sets are exact; removed or unexpected keys fail.
-   - All three clocks used by session creation, mutation, and storage are frozen.
+    - Session creation, mutation, and storage clocks are frozen through injection.
+    - Golden scenarios stub both raw retrieval and their synthetic evaluated facts. Separate SQL, operation-order, and independent evaluator-equivalence tests cover the real matching boundary.
 4. **Controlled regeneration**
    - Regeneration is refused when `CI` is true.
    - Local regeneration requires both `--golden-regenerate` and
@@ -38,8 +39,9 @@ files are not required to audit or run the controls below.
 6. **Type-regression gate**
    - CI runs mypy on the PR base and current revision with the same toolchain.
    - It fails closed on invocation or output-parse errors.
-   - It compares a multiset of `(path, error code, message)` fingerprints and
-     rejects additions; total-count compensation cannot hide a regression.
+    - It compares a multiset of `(path, error code, message)` fingerprints and
+      rejects additions; total-count compensation cannot hide a regression.
+    - `scripts/mypy_delta_path_map.json` remaps reviewed baseline paths only. Its entries land with implementation relocations; the comparator validates object/string shape but does not enforce stale-entry removal.
 7. **Dependency security**
    - CI runs `pip-audit --strict` against `requirements.lock`.
 8. **Repository invariants**

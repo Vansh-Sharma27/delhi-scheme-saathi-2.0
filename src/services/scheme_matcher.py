@@ -5,11 +5,15 @@ from typing import Any
 
 import asyncpg
 
-from src.dss.infrastructure.database.scheme_repo import get_schemes_by_life_event, hybrid_search
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
+from src.dss.infrastructure.database.catalog import get_canonical_life_events
+from src.dss.infrastructure.database.scheme_repo import (
+    get_schemes_by_life_event,
+    retrieve_candidates,
+)
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, get_embedding_client
-from src.models.scheme import Scheme, SchemeMatch
-from src.models.session import UserProfile
-from src.utils.scheme_catalog import get_canonical_life_events
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +70,21 @@ async def match_schemes(
 
     # Run hybrid search
     fetch_limit = max(limit * 3, 10)
-    matches = await hybrid_search(
+    candidates = await retrieve_candidates(
         pool=pool,
         life_event=profile.life_event,
         profile=profile,
         query_embedding=query_embedding,
         limit=fetch_limit,
     )
+    matches = [
+        SchemeMatch(
+            scheme=candidate.scheme,
+            similarity=candidate.similarity,
+            eligibility_match=calculate_eligibility_match(candidate.scheme, profile),
+        )
+        for candidate in candidates
+    ]
 
     # Post-filter any scheme that still fails a hard eligibility check. This
     # catches non-SQL restrictions such as caste categories and normalized

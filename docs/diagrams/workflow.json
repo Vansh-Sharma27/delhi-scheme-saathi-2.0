@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {"title": "Delhi Scheme Saathi · Matching Workflow", "output": "docs/diagrams/workflow.html", "quality_profile": "showcase", "locale": "en", "legend": {"entries": {"frontend": {"label": "Inputs / results"}, "backend": {"label": "Evaluation / ranking"}, "database": {"label": "SQL retrieval"}, "security": {"label": "Deterministic filter"}, "cloud": {"label": "Embedding provider"}}}, "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "lanes": [{"id": "retrieval", "label": "Infrastructure retrieval"}, {"id": "policy", "label": "Domain evaluation + application filtering"}, {"id": "output", "label": "Ranking and selection"}],
+  "mainPath": ["profile", "embedding", "retrieve", "evaluate", "topic", "reject", "rank", "truncate"],
+  "nodes": [
+    {"id": "profile", "lane": "retrieval", "col": 0, "type": "frontend", "label": "Profile + topic", "sublabel": "Matching inputs", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 32, "end_line": 50}]},
+    {"id": "embedding", "lane": "retrieval", "col": 1, "type": "cloud", "label": "Optional vector", "sublabel": "1024 dimensions", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 52, "end_line": 69}]},
+    {"id": "retrieve", "lane": "retrieval", "col": 2, "type": "database", "label": "Raw candidates", "sublabel": "SQL age + income", "width": 145, "sources": [{"path": "src/dss/infrastructure/database/scheme_repo.py", "line": 91, "end_line": 171}]},
+    {"id": "evaluate", "lane": "policy", "col": 2, "type": "backend", "label": "Evaluate all", "sublabel": "Existing checks", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 80, "end_line": 87}, {"path": "src/dss/domain/eligibility/evaluator.py", "line": 50, "end_line": 99}]},
+    {"id": "topic", "lane": "policy", "col": 3, "type": "security", "label": "Topic filter", "sublabel": "Canonical / runtime", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 21, "end_line": 29}, {"path": "src/services/scheme_matcher.py", "line": 92, "end_line": 103}]},
+    {"id": "reject", "lane": "policy", "col": 4, "type": "security", "label": "Hard-check filter", "sublabel": "Drop any False", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 104, "end_line": 117}]},
+    {"id": "rank", "lane": "output", "col": 4, "type": "backend", "label": "Rank survivors", "sublabel": "0.4 / 0.4 / 0.2", "width": 145, "sources": [{"path": "src/services/scheme_matcher.py", "line": 184, "end_line": 208}]},
+    {"id": "truncate", "lane": "output", "col": 5, "type": "frontend", "label": "Top matches", "sublabel": "Requested limit", "width": 140, "sources": [{"path": "src/services/scheme_matcher.py", "line": 118, "end_line": 126}]}
+  ],
+  "edges": [
+    {"id": "input", "from": "profile", "to": "embedding", "variant": "emphasis"},
+    {"id": "query", "from": "embedding", "to": "retrieve", "label": "vector or None", "variant": "emphasis"},
+    {"id": "raw", "from": "retrieve", "to": "evaluate", "label": "candidates", "variant": "emphasis"},
+    {"id": "facts", "from": "evaluate", "to": "topic", "variant": "emphasis"},
+    {"id": "consistent", "from": "topic", "to": "reject", "label": "on topic", "variant": "emphasis"},
+    {"id": "passing", "from": "reject", "to": "rank", "label": "no failures", "variant": "emphasis"},
+    {"id": "ranked", "from": "rank", "to": "truncate", "label": "limit", "variant": "emphasis"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Order is behavior", "items": ["Retrieve, evaluate, topic filter, reject failing fields, rank, then truncate.", "Evaluation runs before topic filtering; the split does not add new criteria."]},
+    {"dot": "amber", "title": "SQL fallback remains", "items": ["Canonical catalog IDs take precedence over database life-event tags.", "Without a valid vector, SQL orders by benefits_amount DESC NULLS LAST.", "Retrieval fetches max(limit × 3, 10), not just the final limit."]},
+    {"dot": "rose", "title": "Eligibility limits", "items": ["Residency, employment, education, BPL, disability and other stored criteria are not evaluated.", "Ranking combines similarity, evaluated-field match rate and normalized benefit amount."]},
+    {"dot": "emerald", "title": "After deterministic matching", "items": ["This workflow ends at match_schemes, not at the bot reply. ConversationService subsequently applies optional relevance judging and rendering.", "The judge can enrich and reorder matches, prune topic_match=False, and request clarification. Thresholds remain 0.6 and 0.45; skip settings remain 0.85 and 0.15.", "No deterministic results return to collection with a profile-change guard; clarification asks for life_event. Low-context clarification can be suppressed.", "Sources: src/services/conversation/service.py:1333-1465 and src/services/scheme_relevance.py:52-140."]}
+  ]
+}

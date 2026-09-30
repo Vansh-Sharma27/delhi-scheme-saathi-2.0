@@ -144,7 +144,7 @@ async def test_match_schemes_keeps_housing_scheme_for_obc_user_with_lig_income(
             )
         ]
 
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
 
     matches = await scheme_matcher.match_schemes(
         pool=AsyncMock(),  # type: ignore[arg-type]
@@ -185,7 +185,7 @@ async def test_match_schemes_filters_cross_domain_candidate_even_if_db_tag_is_wr
             ),
         ]
 
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
 
     matches = await scheme_matcher.match_schemes(
         pool=AsyncMock(),  # type: ignore[arg-type]
@@ -219,7 +219,7 @@ async def test_match_schemes_keeps_valid_multi_life_event_scheme_via_canonical_m
             )
         ]
 
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
 
     matches = await scheme_matcher.match_schemes(
         pool=AsyncMock(),  # type: ignore[arg-type]
@@ -253,7 +253,7 @@ async def test_match_schemes_forwards_only_exact_dimension_embeddings(
         "get_embedding_client",
         lambda: embedding_client,
     )
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", hybrid_search)
 
     await scheme_matcher.match_schemes(
         pool=AsyncMock(),  # type: ignore[arg-type]
@@ -282,7 +282,7 @@ async def test_match_schemes_forwards_none_after_embedding_provider_failure(
         "get_embedding_client",
         lambda: embedding_client,
     )
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", hybrid_search)
 
     await scheme_matcher.match_schemes(
         pool=AsyncMock(),  # type: ignore[arg-type]

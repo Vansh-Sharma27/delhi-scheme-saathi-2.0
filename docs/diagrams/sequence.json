@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {"title": "Delhi Scheme Saathi · Direct Chat Turn", "output": "docs/diagrams/sequence.html", "quality_profile": "showcase", "locale": "en", "column_fit": "spread", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "participants": [
+    {"id": "caller", "type": "external", "label": "Caller", "sublabel": "Direct chat", "sources": [{"path": "src/main.py", "line": 390, "end_line": 432}]},
+    {"id": "api", "type": "backend", "label": "API", "sublabel": "Namespaced ingress", "sources": [{"path": "src/main.py", "line": 405, "end_line": 432}]},
+    {"id": "turn", "type": "backend", "label": "Conversation", "sublabel": "Turn controller", "sources": [{"path": "src/services/conversation/service.py", "line": 139, "end_line": 219}]},
+    {"id": "store", "type": "database", "label": "Sessions", "sublabel": "Load / save", "sources": [{"path": "src/services/session_manager.py", "line": 14, "end_line": 47}]},
+    {"id": "ai", "type": "cloud", "label": "AI", "sublabel": "Bounded proposal", "sources": [{"path": "src/services/ai_orchestrator.py", "line": 150, "end_line": 245}]},
+    {"id": "match", "type": "backend", "label": "Matching", "sublabel": "SQL + domain", "sources": [{"path": "src/services/scheme_matcher.py", "line": 32, "end_line": 126}]}
+  ],
+  "segments": [{"from": 150, "to": 315, "label": "Ingress and state"}, {"from": 325, "to": 465, "label": "Proposal and decision"}, {"from": 475, "to": 650, "label": "Matching and response"}],
+  "messages": [
+    {"id": "request", "from": "caller", "to": "api", "y": 175, "label": "POST /api/chat", "variant": "emphasis"},
+    {"id": "dispatch", "from": "api", "to": "turn", "y": 215, "label": "validated api:-prefixed request", "variant": "security"},
+    {"id": "load", "from": "turn", "to": "store", "y": 255, "label": "get or create session"},
+    {"id": "loaded", "from": "store", "to": "turn", "y": 295, "label": "session + clock", "variant": "return"},
+    {"id": "analyze", "from": "turn", "to": "ai", "y": 345, "label": "analyze ordinary message · 8s"},
+    {"id": "proposal", "from": "ai", "to": "turn", "y": 380, "label": "proposal or safe output", "variant": "return"},
+    {"id": "matching", "from": "turn", "to": "match", "y": 415, "label": "if required: retrieve + evaluate", "variant": "emphasis"},
+    {"id": "matches", "from": "match", "to": "turn", "y": 450, "label": "topic-filtered ranked matches", "variant": "return"},
+    {"id": "judge", "from": "turn", "to": "ai", "y": 495, "label": "if needed: relevance judge · 3s"},
+    {"id": "judged", "from": "ai", "to": "turn", "y": 530, "label": "present / clarify / no match", "variant": "return"},
+    {"id": "save", "from": "turn", "to": "store", "y": 565, "label": "save state + messages"},
+    {"id": "reply", "from": "turn", "to": "api", "y": 600, "label": "ChatResponse", "variant": "return"},
+    {"id": "json", "from": "api", "to": "caller", "y": 635, "label": "response + state + matches", "variant": "return"}
+  ],
+  "activations": [{"participant": "api", "from": 175, "to": 640, "type": "backend"}, {"participant": "turn", "from": 215, "to": 605, "type": "backend"}, {"participant": "match", "from": 415, "to": 455, "type": "backend"}],
+  "cards": [
+    {"dot": "cyan", "title": "Ordinary matching turn", "items": ["Commands and callbacks short-circuit the ordinary analysis path.", "The API checks its key when set and sanitizes input before namespacing.", "Language, reset, profile and next-state decisions precede matching; deterministic rules override AI proposals."]},
+    {"dot": "amber", "title": "Optional work", "items": ["Matching runs only when the state and profile policy call for it.", "Response generation can use a separate 8s AI task; memory refresh is queued asynchronously."]},
+    {"dot": "rose", "title": "Scope", "items": ["This trace describes the direct API, not Telegram speech processing.", "It does not imply new eligibility criteria or conflict-safe session writes."]}
+  ]
+}

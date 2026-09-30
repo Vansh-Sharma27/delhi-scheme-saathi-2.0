@@ -9,8 +9,9 @@ id and both names of the last five schemes shown.
 
 import re
 
-from src.models.scheme import SchemeMatch
-from src.models.session import ConversationState, Session
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.schemes.scheme import SchemeMatch
 from src.services import session_manager
 
 # States in which a scheme is open, so a follow-up question is about that

@@ -3,7 +3,8 @@
 import re
 from typing import Any
 
-from src.models.session import UserProfile
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.infrastructure.database.catalog import _load_catalog
 
 FIELD_QUESTION_ORDER = ("life_event", "age", "gender", "category", "annual_income")
 
@@ -30,7 +31,12 @@ _INCOME_ATTEMPT_PATTERN = re.compile(
 
 def get_required_matching_fields(profile: UserProfile) -> tuple[str, ...]:
     """Return the scheme-aware profile fields that matter before matching."""
-    return profile.required_fields_for_matching()
+    return profile.required_fields_for_matching(_load_catalog().values() if profile.life_event else ())
+
+
+def is_complete_for_matching(profile: UserProfile) -> bool:
+    """Check completeness using infrastructure-supplied catalog values."""
+    return all(getattr(profile, field) is not None for field in get_required_matching_fields(profile))
 
 
 def _has_income_context(text_lower: str, current_field: str | None) -> bool:

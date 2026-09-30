@@ -6,20 +6,14 @@ depend on the port and Phase 3 can relocate the in-memory and DynamoDB
 adapters behind it. The legacy module re-exports the protocol; the facade
 is removed in Phase 6.
 
-`Session` still lives in `src/models/session.py` and is referenced here
-only under `if TYPE_CHECKING:` for typing. The import-linter graph drops
-TYPE_CHECKING imports (see the `exclude_type_checking_imports` setting), so
-this port has no runtime dependency on the legacy tree. Phase 4 moves
-`Session` into `src.dss.domain.conversations` and this reference resolves
-there.
+Session values are imported directly from the canonical domain model.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from src.models.session import Session
+from src.dss.domain.conversations.session import Session
 
 
 @runtime_checkable

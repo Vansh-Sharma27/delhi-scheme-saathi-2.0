@@ -1,0 +1,33 @@
+{
+  "schema_version": 1, "diagram_type": "sequence",
+  "meta": {"title": "Delhi Scheme Saathi · Telegram Voice Turn", "output": "docs/diagrams/voice-sequence.html", "quality_profile": "showcase", "locale": "en", "column_fit": "spread", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "participants": [
+    {"id": "telegram", "type": "frontend", "label": "Telegram", "sublabel": "Update + file API", "sources": [{"path": "src/webhook/handler.py", "line": 195, "end_line": 274}]},
+    {"id": "webhook", "type": "backend", "label": "Webhook", "sublabel": "Ingress + delivery", "sources": [{"path": "src/main.py", "line": 364, "end_line": 386}, {"path": "src/webhook/handler.py", "line": 195, "end_line": 274}]},
+    {"id": "session", "type": "database", "label": "Session", "sublabel": "Language context", "sources": [{"path": "src/webhook/handler.py", "line": 219, "end_line": 220}]},
+    {"id": "speech", "type": "cloud", "label": "Speech", "sublabel": "Selected provider", "sources": [{"path": "src/webhook/handler.py", "line": 31, "end_line": 46}, {"path": "src/webhook/handler.py", "line": 277, "end_line": 375}]},
+    {"id": "turn", "type": "backend", "label": "Conversation", "sublabel": "Normal turn pipeline", "sources": [{"path": "src/webhook/handler.py", "line": 238, "end_line": 263}]}
+  ],
+  "messages": [
+    {"id": "voice-update", "from": "telegram", "to": "webhook", "y": 160, "label": "voice/audio update; secret checked if set", "variant": "security"},
+    {"id": "typing", "from": "webhook", "to": "telegram", "y": 197, "label": "typing indicator", "variant": "return"},
+    {"id": "language", "from": "webhook", "to": "session", "y": 234, "label": "load session language + lock"},
+    {"id": "language-return", "from": "session", "to": "webhook", "y": 271, "label": "language context", "variant": "return"},
+    {"id": "download", "from": "webhook", "to": "telegram", "y": 308, "label": "download file if provider configured"},
+    {"id": "bytes", "from": "telegram", "to": "webhook", "y": 345, "label": "audio bytes", "variant": "return"},
+    {"id": "stt", "from": "webhook", "to": "speech", "y": 382, "label": "probe session-dependent languages"},
+    {"id": "transcript", "from": "speech", "to": "webhook", "y": 419, "label": "best transcript + confidence", "variant": "return"},
+    {"id": "echo", "from": "webhook", "to": "telegram", "y": 456, "label": "if confidence ≥ 0.5: transcript echo", "variant": "return"},
+    {"id": "process", "from": "webhook", "to": "turn", "y": 493, "label": "caption + transcript as ChatRequest", "variant": "emphasis"},
+    {"id": "response", "from": "turn", "to": "webhook", "y": 530, "label": "reply + buttons + language", "variant": "return"},
+    {"id": "text", "from": "webhook", "to": "telegram", "y": 567, "label": "clean/split text; buttons on last part", "variant": "return"},
+    {"id": "tts", "from": "webhook", "to": "speech", "y": 604, "label": "TTS only for supported short reply"},
+    {"id": "tts-result", "from": "speech", "to": "webhook", "y": 641, "label": "audio bytes if successful", "variant": "return"},
+    {"id": "audio-send", "from": "webhook", "to": "telegram", "y": 678, "label": "sendVoice for OGG; sendAudio otherwise", "variant": "return"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Actual provider selection", "items": ["Sarvam is selected when its key exists, otherwise configured Bhashini; there is no automatic cross-provider retry after Sarvam fails.", "Language probing retries candidates through the selected provider and scores confidence, transcript quality and language alignment."]},
+    {"dot": "rose", "title": "Input failure paths", "items": ["Missing IDs or text can be ignored. Missing provider key, file, audio, low confidence, or exceptions produce a text prompt.", "A caption can still provide text when STT returns nothing.", "Telegram update_id is not deduplicated."]},
+    {"dot": "amber", "title": "Delivery conditions", "items": ["Text is sent before optional audio; Hinglish, split messages and TTS text above 900 characters skip audio.", "TTS failures preserve the text response. Sending failure attempts plain text capped at 4000 characters.", "Audio bytes go directly to Telegram; this path does not upload to S3."]}
+  ]
+}

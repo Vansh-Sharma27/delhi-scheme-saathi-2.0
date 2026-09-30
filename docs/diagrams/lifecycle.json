@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {"title": "Delhi Scheme Saathi · Session Lifecycle", "output": "docs/diagrams/lifecycle.html", "quality_profile": "showcase", "locale": "en", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "lanes": [{"id": "main", "label": "Foreground session"}, {"id": "memory", "label": "Asynchronous working memory"}, {"id": "reset", "label": "User-controlled reset"}, {"id": "terminal", "label": "Persistence expiry"}],
+  "states": [
+    {"id": "missing", "type": "start", "label": "No session", "sublabel": "Store returns None", "lane": "main", "col": 0, "sources": [{"path": "src/services/session_manager.py", "line": 14, "end_line": 37}]},
+    {"id": "created", "type": "active", "label": "Created", "sublabel": "GREETING + private clock", "lane": "main", "col": 1, "sources": [{"path": "src/services/session_manager.py", "line": 24, "end_line": 37}]},
+    {"id": "turn", "type": "active", "label": "Handle turn", "sublabel": "Profile · state · reply", "lane": "main", "col": 2, "sources": [{"path": "src/services/conversation/service.py", "line": 170, "end_line": 219}]},
+    {"id": "saved", "type": "waiting", "label": "Saved session", "sublabel": "Last 12 messages", "lane": "main", "col": 3, "sources": [{"path": "src/dss/domain/conversations/session.py", "line": 84, "end_line": 126}, {"path": "src/services/conversation/service.py", "line": 1470, "end_line": 1564}]},
+    {"id": "queued", "type": "waiting", "label": "Refresh queued", "sublabel": "Enabled + threshold met", "lane": "memory", "col": 3, "sources": [{"path": "src/services/conversation/service.py", "line": 1510, "end_line": 1564}, {"path": "src/services/conversation_memory.py", "line": 81, "end_line": 97}]},
+    {"id": "refreshed", "type": "active", "label": "Memory refreshed", "sublabel": "Worker saves whole item", "lane": "memory", "col": 4, "sources": [{"path": "src/services/ai_background.py", "line": 90, "end_line": 132}]},
+    {"id": "reset", "type": "active", "label": "Fresh context", "sublabel": "Clock + creation time kept", "lane": "reset", "col": 2, "sources": [{"path": "src/services/session_manager.py", "line": 191, "end_line": 203}, {"path": "src/services/conversation/service.py", "line": 225, "end_line": 240}]},
+    {"id": "expired", "type": "neutral", "label": "TTL eligible", "sublabel": "DynamoDB only · 7 days", "lane": "terminal", "col": 3, "sources": [{"path": "src/dss/domain/conversations/session.py", "line": 100, "end_line": 126}, {"path": "sam-template.yaml", "line": 75, "end_line": 89}]},
+    {"id": "deleted", "type": "neutral", "label": "Removed by store", "sublabel": "DynamoDB async cleanup", "lane": "terminal", "col": 4, "sources": [{"path": "sam-template.yaml", "line": 75, "end_line": 89}, {"path": "src/dss/infrastructure/sessions/session_store.py", "line": 59, "end_line": 73}]}
+  ],
+  "transitions": [
+    {"id": "create", "from": "missing", "to": "created", "label": "create"},
+    {"id": "first-turn", "from": "created", "to": "turn", "label": "message"},
+    {"id": "persist", "from": "turn", "to": "saved", "label": "save"},
+    {"id": "next", "from": "saved", "to": "turn", "label": "next turn", "variant": "dashed", "route": "top-channel"},
+    {"id": "enqueue", "from": "saved", "to": "queued", "label": "if due", "variant": "dashed"},
+    {"id": "refresh", "from": "queued", "to": "refreshed", "label": "worker", "labelDx": 45, "labelDy": -30},
+    {"id": "memory-save", "from": "refreshed", "to": "saved", "label": "save", "variant": "dashed"},
+    {"id": "restart", "from": "turn", "to": "reset", "label": "reset", "variant": "security"},
+    {"id": "reset-save", "from": "reset", "to": "saved", "label": "save fresh"},
+    {"id": "ttl", "from": "saved", "to": "expired", "label": "TTL due", "variant": "dashed"},
+    {"id": "cleanup", "from": "expired", "to": "deleted", "label": "async"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Time semantics", "items": ["Clock identity survives copies and resets; clock state is never serialized.", "copy_with owns the default updated_at stamp.", "DynamoDB saves preserve updated_at; in-memory saves refresh it."]},
+    {"dot": "amber", "title": "Refresh is conditional", "items": ["Defaults: eight completed turns or approximately 6000 context tokens.", "A pending job suppresses another refresh request; an unavailable queue clears the marker and saves again.", "The worker skips missing sessions, other work types and sessions without a pending flag.", "Refresh exceptions clear the marker; decode or save failures can still produce SQS batch failures.", "Foreground and background saves can still overwrite each other."]},
+    {"dot": "rose", "title": "Expiry is not an exact deadline", "items": ["TTL equals updated_at plus seven days; reads do not reject TTL-eligible rows.", "The in-memory backend has no TTL cleanup.", "An expired row that DynamoDB has not removed can still be read."]}
+  ]
+}

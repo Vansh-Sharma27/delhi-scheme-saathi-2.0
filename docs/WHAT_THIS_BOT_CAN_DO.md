@@ -6,7 +6,7 @@ Please try `/help` first in the Telegram bot. That command gives the simplest in
 
 **Purpose**
 
-Delhi Scheme Saathi is a conversational guide for Delhi government welfare schemes. It helps a user describe their situation in plain language and then shows relevant schemes and next-step guidance.
+Delhi Scheme Saathi is a conversational guide for central and Delhi government welfare schemes available to Delhi residents. It helps a user describe their situation in plain language and then shows relevant schemes and next-step guidance.
 
 **Current capabilities**
 
@@ -37,13 +37,13 @@ Delhi Scheme Saathi is a conversational guide for Delhi government welfare schem
 
 **Important**
 
-This bot is a guidance tool, not the final government authority. Final eligibility and approval depend on official rules, document verification, and department review.
+This bot is a guidance tool, not the final government authority. Its catalog currently contains five schemes, and automated matching checks only part of the stored eligibility criteria. It does not submit applications or directly connect the user to an operator. Final eligibility and approval depend on official rules, document verification, and department review.
 
 ## हिंदी
 
 **उद्देश्य**
 
-दिल्ली स्कीम साथी दिल्ली सरकार की कल्याणकारी योजनाओं के लिए एक संवादात्मक गाइड है। यह उपयोगकर्ता की स्थिति को सरल भाषा में समझकर संबंधित योजनाएं और आगे की जानकारी बताता है।
+दिल्ली स्कीम साथी दिल्ली निवासियों के लिए उपलब्ध केंद्र और दिल्ली सरकार की कल्याणकारी योजनाओं का संवादात्मक गाइड है। यह उपयोगकर्ता की स्थिति को सरल भाषा में समझकर संबंधित योजनाएं और आगे की जानकारी बताता है।
 
 **अभी यह बॉट क्या कर सकता है**
 
@@ -74,4 +74,4 @@ This bot is a guidance tool, not the final government authority. Final eligibili
 
 **महत्वपूर्ण**
 
-यह बॉट मार्गदर्शन के लिए है। अंतिम पात्रता और मंजूरी सरकारी नियमों, दस्तावेज़ सत्यापन, और विभागीय जांच पर निर्भर करती है।
+यह बॉट मार्गदर्शन के लिए है। अभी catalog में पांच योजनाएं हैं और automated matching पात्रता की सभी शर्तें नहीं जांचती। यह आवेदन जमा नहीं करता और सीधे किसी operator से नहीं जोड़ता। अंतिम पात्रता और मंजूरी सरकारी नियमों, दस्तावेज़ सत्यापन, और विभागीय जांच पर निर्भर करती है।
