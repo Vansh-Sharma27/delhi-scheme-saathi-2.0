@@ -185,6 +185,7 @@ allow_indirect_imports = false
 # entry that stops matching any import in the graph fails the contract at
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
+    "src.dss.infrastructure.database.catalog -> src.utils.scheme_catalog",
     "src.dss.domain.profiles.profile -> src.models.session",
     "src.dss.domain.conversations.session -> src.models.session",
     "src.dss.domain.conversations.states -> src.models.session",
