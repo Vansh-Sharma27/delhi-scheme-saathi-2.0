@@ -18,7 +18,7 @@ this note is still accurate.
 
 import asyncpg
 
-from src.models.rejection_rule import RejectionRule
+from src.dss.domain.schemes.rejection_rule import RejectionRule
 
 
 async def get_rules_by_scheme(

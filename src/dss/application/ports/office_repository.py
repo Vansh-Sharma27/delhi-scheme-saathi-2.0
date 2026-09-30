@@ -19,10 +19,9 @@ there.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from src.models.office import Office
+from src.dss.domain.schemes.office import Office
 
 
 @runtime_checkable

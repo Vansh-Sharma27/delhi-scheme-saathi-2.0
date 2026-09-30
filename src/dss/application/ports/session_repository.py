@@ -16,10 +16,9 @@ there.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from src.models.session import Session
+from src.dss.domain.conversations.session import Session
 
 
 @runtime_checkable

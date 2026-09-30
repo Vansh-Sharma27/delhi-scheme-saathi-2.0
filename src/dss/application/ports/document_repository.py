@@ -16,10 +16,9 @@ there.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from src.models.document import Document
+from src.dss.domain.schemes.document import Document
 
 
 @runtime_checkable

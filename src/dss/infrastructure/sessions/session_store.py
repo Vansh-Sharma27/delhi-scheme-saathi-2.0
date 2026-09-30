@@ -13,8 +13,8 @@ from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import (
     SessionStore as SessionStore,
 )
+from src.dss.domain.conversations.session import Session
 from src.dss.infrastructure.sessions.clock import SystemClock
-from src.models.session import Session
 
 
 class InMemorySessionStore:

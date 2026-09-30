@@ -21,7 +21,7 @@ of the in-Python distance sort, not part of any port.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import asyncpg
 
@@ -29,19 +29,17 @@ from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
 from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.document import Document
+from src.dss.domain.schemes.office import Office
+from src.dss.domain.schemes.rejection_rule import RejectionRule
+from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
 from src.dss.infrastructure.database import (
     document_repo,
     office_repo,
     rejection_rule_repo,
     scheme_repo,
 )
-
-if TYPE_CHECKING:
-    from src.dss.domain.schemes.rejection_rule import RejectionRule
-    from src.models.document import Document
-    from src.models.office import Office
-    from src.models.scheme import Scheme, SchemeMatch
-    from src.models.session import UserProfile
 
 
 class PostgresSchemeRepository(SchemeRepository):

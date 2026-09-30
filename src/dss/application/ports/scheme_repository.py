@@ -23,11 +23,10 @@ runtime dependency on the legacy tree. Phase 4 moves `Scheme` and
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from src.models.scheme import Scheme, SchemeMatch
-    from src.models.session import UserProfile
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
 
 
 @runtime_checkable
