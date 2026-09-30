@@ -7,7 +7,7 @@ from pathlib import Path
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.dss.infrastructure.database.scheme_repo import calculate_eligibility_match
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
 from src.models.scheme import EligibilityCriteria, Scheme
 from src.models.session import UserProfile
 from tests import eligibility_reference
