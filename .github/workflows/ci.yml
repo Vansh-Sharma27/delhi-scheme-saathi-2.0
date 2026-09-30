@@ -72,6 +72,11 @@ jobs:
           if [ -z "$BASELINE_REF" ] || [[ "$BASELINE_REF" =~ ^0+$ ]]; then
             BASELINE_REF="HEAD^"
           fi
+          # A force-push can remove the previous SHA from a fresh checkout.
+          # Compare the entire branch against main instead of skipping the gate.
+          if ! git rev-parse --verify "$BASELINE_REF^{commit}" >/dev/null 2>&1; then
+            BASELINE_REF=$(git merge-base HEAD origin/main)
+          fi
           python scripts/check_mypy_delta.py --baseline-ref "$BASELINE_REF"
 
       - name: Run import-linter
