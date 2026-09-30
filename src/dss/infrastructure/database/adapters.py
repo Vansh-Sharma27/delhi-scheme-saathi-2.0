@@ -33,7 +33,7 @@ from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.document import Document
 from src.dss.domain.schemes.office import Office
 from src.dss.domain.schemes.rejection_rule import RejectionRule
-from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
+from src.dss.domain.schemes.scheme import Scheme, SchemeCandidate, SchemeMatch
 from src.dss.infrastructure.database import (
     document_repo,
     office_repo,
@@ -81,6 +81,17 @@ class PostgresSchemeRepository(SchemeRepository):
     ) -> list[Scheme]:
         return await scheme_repo.search_schemes_by_text(
             self._pool, search_text, limit
+        )
+
+    async def retrieve_candidates(
+        self,
+        life_event: str | None,
+        profile: UserProfile,
+        query_embedding: list[float] | None = None,
+        limit: int = 5,
+    ) -> list[SchemeCandidate]:
+        return await scheme_repo.retrieve_candidates(
+            self._pool, life_event, profile, query_embedding, limit
         )
 
     async def get_scheme_debug_rows(

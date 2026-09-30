@@ -584,6 +584,15 @@ class InMemorySchemeRepository:
         ]
         return sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)[:limit]
 
+    async def retrieve_candidates(
+        self, life_event: str | None, profile: Any,
+        query_embedding: list[float] | None = None, limit: int = 5,
+    ) -> list[Any]:
+        from src.dss.domain.schemes.scheme import SchemeCandidate
+
+        matches = await self.hybrid_search(life_event, profile, query_embedding, limit)
+        return [SchemeCandidate(scheme=m.scheme, similarity=m.similarity) for m in matches]
+
     async def get_scheme_debug_rows(self, scheme_ids: list[str]) -> list[dict[str, Any]]:
         wanted = set(scheme_ids)
         return [
@@ -627,6 +636,9 @@ async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benef
 
     matches = await repo.hybrid_search("HOUSING", profile=None, query_embedding=None)
     assert [m.scheme.id for m in matches] == ["S2", "S1", "S3"]
+    candidates = await repo.retrieve_candidates("HOUSING", profile=None)
+    assert [c.scheme.id for c in candidates] == ["S2", "S1", "S3"]
+    assert all(not hasattr(c, "eligibility_match") for c in candidates)
 
     by_event = await repo.get_schemes_by_life_event("HOUSING")
     assert [s.id for s in by_event] == ["S2", "S1", "S3"]

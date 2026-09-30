@@ -12,7 +12,7 @@ from typing import Any
 import asyncpg
 
 from src.dss.domain.profiles.profile import UserProfile
-from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeMatch
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate, SchemeMatch
 from src.dss.infrastructure.database.catalog import (
     get_canonical_life_events,
     get_canonical_scheme_ids_for_life_event,
@@ -79,13 +79,13 @@ async def get_all_schemes(pool: asyncpg.Pool, active_only: bool = True) -> list[
         return [scheme_from_row(Scheme, row) for row in rows]
 
 
-async def hybrid_search(
+async def retrieve_candidates(
     pool: asyncpg.Pool,
     life_event: str | None,
     profile: UserProfile,
     query_embedding: list[float] | None = None,
     limit: int = 5
-) -> list[SchemeMatch]:
+) -> list[SchemeCandidate]:
     """3-stage hybrid search for scheme matching.
 
     Stage 1: Filter by life event
@@ -152,7 +152,7 @@ async def hybrid_search(
 
         rows = await conn.fetch(query, *params)
 
-        # Build results with eligibility match details
+        # Retrieval returns raw candidates; evaluation belongs to the caller.
         results = []
         for row in rows:
             scheme = scheme_from_row(Scheme, row)
@@ -160,16 +160,27 @@ async def hybrid_search(
             sim_value = row.get("similarity")
             similarity = float(sim_value) if sim_value is not None else 0.0
 
-            # Calculate eligibility match
-            eligibility_match = _calculate_eligibility_match(scheme, profile)
-
-            results.append(SchemeMatch(
+            results.append(SchemeCandidate(
                 scheme=scheme,
                 similarity=similarity,
-                eligibility_match=eligibility_match
             ))
 
         return results
+
+
+async def hybrid_search(
+    pool: asyncpg.Pool,
+    life_event: str | None,
+    profile: UserProfile,
+    query_embedding: list[float] | None = None,
+    limit: int = 5,
+) -> list[SchemeMatch]:
+    """Legacy evaluated retrieval, retained until Phase 6."""
+    candidates = await retrieve_candidates(pool, life_event, profile, query_embedding, limit)
+    return [
+        SchemeMatch(scheme=c.scheme, similarity=c.similarity, eligibility_match=_calculate_eligibility_match(c.scheme, profile))
+        for c in candidates
+    ]
 
 
 def _lookup_case_insensitive(mapping: dict[str, int], key: str) -> int | None:

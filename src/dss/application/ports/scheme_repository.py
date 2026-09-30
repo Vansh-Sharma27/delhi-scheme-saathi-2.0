@@ -26,7 +26,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from src.dss.domain.profiles.profile import UserProfile
-from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
+from src.dss.domain.schemes.scheme import Scheme, SchemeCandidate, SchemeMatch
 
 
 @runtime_checkable
@@ -45,6 +45,13 @@ class SchemeRepository(Protocol):
         query_embedding: list[float] | None = None,
         limit: int = 5,
     ) -> list[SchemeMatch]: ...
+    async def retrieve_candidates(
+        self,
+        life_event: str | None,
+        profile: UserProfile,
+        query_embedding: list[float] | None = None,
+        limit: int = 5,
+    ) -> list[SchemeCandidate]: ...
     async def search_schemes_by_text(
         self, search_text: str, limit: int = 10
     ) -> list[Scheme]: ...

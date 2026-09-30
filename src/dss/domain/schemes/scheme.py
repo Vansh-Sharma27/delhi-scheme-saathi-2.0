@@ -135,6 +135,13 @@ class Scheme(BaseModel, frozen=True):
     last_verified: datetime | None = None
     is_active: bool = True
 
+class SchemeCandidate(BaseModel, frozen=True):
+    """Retrieved scheme and similarity, before eligibility evaluation."""
+
+    scheme: Scheme
+    similarity: float = 0.0
+
+
 class SchemeMatch(BaseModel, frozen=True):
     """Scheme with similarity score from vector search."""
 
