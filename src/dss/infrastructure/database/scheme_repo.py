@@ -17,6 +17,7 @@ from src.dss.infrastructure.database.catalog import (
     get_canonical_life_events,
     get_canonical_scheme_ids_for_life_event,
 )
+from src.dss.infrastructure.database.scheme_codec import scheme_from_row
 
 logger = logging.getLogger(__name__)
 INCOME_SEGMENT_ORDER = ("EWS", "LIG", "MIG", "HIG")
@@ -30,7 +31,7 @@ async def get_scheme_by_id(pool: asyncpg.Pool, scheme_id: str) -> Scheme | None:
             scheme_id
         )
         if row:
-            return Scheme.from_db_row(row)
+            return scheme_from_row(Scheme, row)
     return None
 
 
@@ -64,7 +65,7 @@ async def get_schemes_by_life_event(
                 life_event,
                 limit
             )
-        return [Scheme.from_db_row(row) for row in rows]
+        return [scheme_from_row(Scheme, row) for row in rows]
 
 
 async def get_all_schemes(pool: asyncpg.Pool, active_only: bool = True) -> list[Scheme]:
@@ -75,7 +76,7 @@ async def get_all_schemes(pool: asyncpg.Pool, active_only: bool = True) -> list[
             query += " WHERE is_active = true"
         query += " ORDER BY name"
         rows = await conn.fetch(query)
-        return [Scheme.from_db_row(row) for row in rows]
+        return [scheme_from_row(Scheme, row) for row in rows]
 
 
 async def hybrid_search(
@@ -154,7 +155,7 @@ async def hybrid_search(
         # Build results with eligibility match details
         results = []
         for row in rows:
-            scheme = Scheme.from_db_row(row)
+            scheme = scheme_from_row(Scheme, row)
             # Handle None similarity value
             sim_value = row.get("similarity")
             similarity = float(sim_value) if sim_value is not None else 0.0
@@ -300,7 +301,7 @@ async def search_schemes_by_text(
             search_text.lower(),
             limit
         )
-        return [Scheme.from_db_row(row) for row in rows]
+        return [scheme_from_row(Scheme, row) for row in rows]
 
 
 async def get_scheme_debug_rows(
