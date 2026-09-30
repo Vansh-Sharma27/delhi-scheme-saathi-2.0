@@ -66,21 +66,8 @@ ignore_missing_imports = true
 
 [tool.importlinter]
 root_package = "src"
-# Allow `if TYPE_CHECKING:` imports to be excluded from the import graph so
-# Phase 2 ports in src.dss.application.ports can reference domain types that
-# still live in the legacy src.* tree (Session, Scheme, ...) purely for
-# typing, without creating a runtime dependency the forbidden contract
-# below would otherwise catch. grimp detects the guard syntactically
-# (`if TYPE_CHECKING:` / `if <alias>.TYPE_CHECKING:`); a plain runtime
-# `from src.models.session import Session` is never exempted, only
-# TYPE_CHECKING-guarded ones are. This is graph-level, so it affects every
-# contract. Verified Phase 1 green: no existing module under src, tests,
-# or scripts uses `if TYPE_CHECKING`, so nothing the Phase 1 contracts
-# enforced is relaxed; the flag is purely additive for Phase 2's typed
-# Protocols. Phase 4 relocates the domain types into src.dss.domain and
-# these TYPE_CHECKING references resolve there, at which point the flag is
-# removed so the layers contract regains full sight of the graph.
-exclude_type_checking_imports = true
+# Phase 4 ports import canonical domain types at runtime. TYPE_CHECKING
+# imports remain visible to every contract.
 
 [[tool.importlinter.contracts]]
 name = "Conversation package one-way dependency order (ADR-0004)"
@@ -186,9 +173,6 @@ allow_indirect_imports = false
 # error level, so the list cannot outlive the edges it permits.
 ignore_imports = [
     "src.dss.infrastructure.database.catalog -> src.utils.scheme_catalog",
-    "src.dss.domain.schemes.scheme -> src.models.scheme",
-    "src.dss.domain.schemes.document -> src.models.document",
-    "src.dss.domain.schemes.office -> src.models.office",
     "src.dss.infrastructure.** -> src.config",
 ]
 unmatched_ignore_imports_alerting = "error"
