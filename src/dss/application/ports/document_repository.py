@@ -7,11 +7,7 @@ module-level and take a pool as the first argument, so no existing class
 satisfies a class-shaped protocol; Phase 3 wraps them in an adapter class
 that holds the pool and implements this port.
 
-`Document` still lives in `src/models/document.py` and is referenced here
-only under `if TYPE_CHECKING:`. The import-linter graph drops TYPE_CHECKING
-imports, so this port has no runtime dependency on the legacy tree. Phase
-4 moves `Document` into `src.dss.domain.schemes` and the reference resolves
-there.
+Document values are imported directly from the canonical domain model.
 """
 
 from __future__ import annotations

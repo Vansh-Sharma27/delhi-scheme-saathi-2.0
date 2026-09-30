@@ -1,5 +1,8 @@
 """Pin raw retrieval and evaluation ordering independently of golden mocks."""
 
+import ast
+import subprocess
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,6 +12,43 @@ from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCan
 from src.dss.infrastructure.database import scheme_repo
 from src.services import scheme_matcher
 from tests.test_scheme_matcher import _CapturingPool
+
+
+def test_retrieval_query_body_is_original_ast() -> None:
+    original = subprocess.check_output(["git", "show", "e7f8ae0:src/dss/infrastructure/database/scheme_repo.py"], text=True)
+    current = Path(scheme_repo.__file__).read_text(encoding="utf-8")
+    def query_body(source: str, name: str) -> list[str]:
+        function = next(n for n in ast.parse(source).body if isinstance(n, ast.AsyncFunctionDef) and n.name == name)
+        acquire = next(n for n in function.body if isinstance(n, ast.AsyncWith))
+        result = []
+        for node in acquire.body:
+            result.append(ast.dump(node))
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "rows" for t in node.targets):
+                break
+        return result
+    assert query_body(original, "hybrid_search") == query_body(current, "retrieve_candidates")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("canonical", [True, False])
+@pytest.mark.parametrize("vector", [None, [0.25, -0.5]])
+async def test_raw_retrieval_parameter_positions(monkeypatch: pytest.MonkeyPatch, canonical: bool, vector: list[float] | None) -> None:
+    monkeypatch.setattr(scheme_repo, "get_canonical_scheme_ids_for_life_event", lambda event: ["synthetic"] if canonical else [])
+    connection = AsyncMock()
+    connection.fetch.return_value = []
+    await scheme_repo.retrieve_candidates(_CapturingPool(connection), "HOUSING", UserProfile(age=30, annual_income=200000), vector, 11)
+    query, *params = connection.fetch.await_args.args
+    assert params[:3] == [["synthetic"] if canonical else "HOUSING", 30, 200000]
+    assert params[-1] == 11
+    assert ("id = ANY($1::text[])" in query) is canonical
+    assert ("$1 = ANY(life_events)" in query) is not canonical
+    if vector:
+        assert params[3] == "[0.25,-0.5]"
+        assert "ORDER BY description_embedding <=> $4::vector" in query
+        assert "LIMIT $5" in query
+    else:
+        assert "ORDER BY benefits_amount DESC NULLS LAST" in query
+        assert "LIMIT $4" in query
 
 
 @pytest.mark.asyncio

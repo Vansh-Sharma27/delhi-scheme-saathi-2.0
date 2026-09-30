@@ -9,11 +9,8 @@ text, ordering, or fallback changed. The application layer can now depend on
 the ports; Phase 5 threads these adapters through the service constructors
 and Phase 6 wires them in the composition root.
 
-The domain types (``Scheme``, ``SchemeMatch``, ``UserProfile``, ``Document``,
-``Office``, ``RejectionRule``) still live in the legacy ``src.models`` tree
-until Phase 4 and are referenced only under ``if TYPE_CHECKING:``, matching
-the ports' own pattern, so the import-linter graph records no runtime
-dependency on the legacy tree.
+The adapters and ports import canonical domain values directly. Raw scheme
+retrieval delegates independently of the legacy evaluated search method.
 
 ``haversine_distance`` stays on the office repo module: it is a pure helper
 of the in-Python distance sort, not part of any port.

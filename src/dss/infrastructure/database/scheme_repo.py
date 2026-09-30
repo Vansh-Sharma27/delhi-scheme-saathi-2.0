@@ -95,12 +95,7 @@ async def retrieve_candidates(
     query_embedding: list[float] | None = None,
     limit: int = 5
 ) -> list[SchemeCandidate]:
-    """3-stage hybrid search for scheme matching.
-
-    Stage 1: Filter by life event
-    Stage 2: Filter by eligibility (age, income, category)
-    Stage 3: Rank by vector similarity (if embedding provided)
-    """
+    """Retrieve SQL-filtered candidates in the existing vector/benefit order."""
     async with pool.acquire() as conn:
         # Build dynamic query based on available filters
         params: list[Any] = []

@@ -1,5 +1,9 @@
 """Domain compatibility and dependency-boundary checks."""
 
+import ast
+import subprocess
+from pathlib import Path
+
 from src.dss.application.ports.clock import Clock
 from src.dss.domain.conversations.clock import Clock as DomainClock
 from src.dss.domain.conversations.session import Session
@@ -68,3 +72,28 @@ def test_scheme_codec_matches_legacy_hydration() -> None:
     assert scheme_from_row(Scheme, row).model_dump() == LegacyScheme.from_db_row(row).model_dump()
     hydrated = scheme_from_row(Scheme, row)
     assert SchemeDetailResponse(scheme=hydrated).scheme is hydrated
+
+
+def test_domain_imports_stay_below_application() -> None:
+    root = Path(__file__).resolve().parents[1] / "src" / "dss" / "domain"
+    for path in root.rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("src."):
+                assert node.module.startswith("src.dss.domain."), (path, node.module)
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("src."):
+                        assert alias.name.startswith("src.dss.domain."), (path, alias.name)
+
+
+def test_enum_and_persisted_repair_are_original_ast() -> None:
+    original = subprocess.check_output(["git", "show", "e7f8ae0:src/models/session.py"], text=True)
+    root = Path(__file__).resolve().parents[1]
+    for name, path in [
+        ("ConversationState", "src/dss/domain/conversations/states.py"),
+        ("_normalize_persisted_state", "src/dss/infrastructure/sessions/codec.py"),
+    ]:
+        def definition(source: str, name: str = name) -> str:
+            return ast.dump(next(node for node in ast.parse(source).body if isinstance(node, ast.ClassDef | ast.FunctionDef) and node.name == name))
+        assert definition(original) == definition((root / path).read_text(encoding="utf-8"))
+    assert "class ConversationState(str, Enum):  # noqa: UP042" in (root / "src/dss/domain/conversations/states.py").read_text(encoding="utf-8")

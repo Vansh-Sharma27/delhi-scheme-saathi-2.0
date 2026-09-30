@@ -134,10 +134,9 @@ containers = ["src.dss"]
 #    CHAT_SESSION_PREFIX` inside `src.dss.settings` fails this gate today
 #    (proven). The Phase 6 agent must copy the constant, never import it.
 #
-# Three downward edges remain permitted by this total order but are eliminated
-# by later phases and tightened then: interfaces -> infrastructure (notifier
-# port, Phase 3), application use-cases -> infrastructure (repository ports,
-# Phase 3/5), and infrastructure -> domain (eligibility extraction, Phase 4).
+# Interfaces and application services still reach infrastructure during the
+# transition. Infrastructure imports domain values; eligibility evaluation
+# now belongs to domain and matching orchestrates it after raw retrieval.
 layers = [
     "bootstrap",
     "interfaces",
@@ -163,7 +162,7 @@ source_modules = ["src.dss.bootstrap", "src.dss"]
 # module which in turn imports `src.dss.*` also fails.
 forbidden_modules = ["src.**"]
 allow_indirect_imports = false
-# Phase 3 interim state: adapters relocated into src.dss.infrastructure still
+# Phase 4 interim state: adapters relocated into src.dss.infrastructure still
 # read application settings through the legacy `src.config.get_settings()`
 # singletons (spec 4.6). Every other legacy import under src.dss remains a
 # violation: the entries below are the complete set of tolerated edges, listed

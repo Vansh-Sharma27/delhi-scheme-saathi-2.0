@@ -10,11 +10,7 @@ that holds the pool and implements this port.
 `haversine_distance` is a pure helper used only inside `get_nearest_offices`
 and is not part of the port; it stays with the adapter.
 
-`Office` still lives in `src/models/office.py` and is referenced here only
-under `if TYPE_CHECKING:`. The import-linter graph drops TYPE_CHECKING
-imports, so this port has no runtime dependency on the legacy tree. Phase
-4 moves `Office` into `src.dss.domain.schemes` and the reference resolves
-there.
+Office values are imported directly from the canonical domain model.
 """
 
 from __future__ import annotations

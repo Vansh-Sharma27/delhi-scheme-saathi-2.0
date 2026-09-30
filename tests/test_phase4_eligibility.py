@@ -4,12 +4,12 @@ import ast
 import subprocess
 from pathlib import Path
 
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
-from src.models.scheme import EligibilityCriteria, Scheme
-from src.models.session import UserProfile
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme
 from tests import eligibility_reference
 
 labels = st.sampled_from(["all", "ALL", "All", "SC", "sc", "ST", "OBC", "General", "EWS", "ews", "LIG", "MIG", "HIG", "other", ""])
@@ -63,6 +63,10 @@ def test_reference_is_original_source() -> None:
 
 
 @settings(max_examples=1000, derandomize=True, deadline=None, database=None)
+@example(eligibility=EligibilityCriteria(min_age=18, max_age=60, max_income=100000), profile=UserProfile(age=18, annual_income=100000))
+@example(eligibility=EligibilityCriteria(min_age=18, max_age=60, max_income=100000), profile=UserProfile(age=60, annual_income=100001))
+@example(eligibility=EligibilityCriteria(genders=["ALL"], caste_categories=["ALL"], domicile_required=True, bpl_required=True, disability_required=True), profile=UserProfile(gender="male", category="OBC", has_bpl_card=False, disability_percentage=0))
+@example(eligibility=EligibilityCriteria(income_segments=["LIG"], income_by_category={"EWS": 300000, "ews": 100000, "LIG": 600000}), profile=UserProfile(annual_income=300001))
 @given(eligibility=criteria, profile=profiles)
 def test_evaluator_equivalence(eligibility: EligibilityCriteria, profile: UserProfile) -> None:
     scheme = Scheme(
