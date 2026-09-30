@@ -264,7 +264,7 @@ async def test_matcher_skips_vector_ranking_on_failed_embedding(
         return []
 
     monkeypatch.setattr(scheme_matcher, "get_embedding_client", lambda: FailedEmbeddingClient())
-    monkeypatch.setattr(scheme_matcher, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
 
     profile = UserProfile(life_event="HOUSING")
     matches = await scheme_matcher.match_schemes(

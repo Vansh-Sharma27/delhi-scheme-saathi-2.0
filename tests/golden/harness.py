@@ -313,7 +313,15 @@ async def run_scenario(
             "src.services.scheme_matcher.get_embedding_client",
             return_value=fake_embedding_client,
         ),
-        patch("src.services.scheme_matcher.hybrid_search", new=fake_hybrid_search),
+        patch("src.services.scheme_matcher.retrieve_candidates", new=fake_hybrid_search),
+        # Golden scenarios supply evaluated facts; real evaluation is pinned separately.
+        patch(
+            "src.services.scheme_matcher.calculate_eligibility_match",
+            side_effect=lambda scheme, profile: next(
+                match.eligibility_match for match in fake_hybrid_search.return_value
+                if match.scheme is scheme
+            ),
+        ),
         patch(
             "src.services.conversation.views.scheme_repo.get_scheme_by_id",
             new=get_scheme_mock,
