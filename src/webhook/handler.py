@@ -15,7 +15,7 @@ from typing import Any
 import asyncpg
 
 from src.config import get_settings
-from src.integrations.sarvam import get_sarvam_client
+from src.dss.infrastructure.speech.sarvam import get_sarvam_client
 from src.integrations.telegram import get_telegram_client
 from src.models.api import ChatRequest, TelegramUpdate
 from src.services import session_manager
@@ -40,7 +40,7 @@ def _get_voice_client():
         return get_sarvam_client()
 
     if settings.bhashini_api_key:
-        from src.integrations.bhashini import get_bhashini_client
+        from src.dss.infrastructure.speech.bhashini import get_bhashini_client
         return get_bhashini_client()
 
     return get_sarvam_client()

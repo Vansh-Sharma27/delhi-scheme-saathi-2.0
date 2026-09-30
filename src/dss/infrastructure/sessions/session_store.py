@@ -1,0 +1,111 @@
+"""Session store - in-memory for MVP, DynamoDB for production.
+
+Moved to ``src.dss.infrastructure.sessions`` in Phase 3 behind the
+``SessionStore`` port; the legacy ``src.db.session_store`` module re-exports
+these names until Phase 6 removes the facade.
+
+In-memory saves accept an injected Clock, defaulting to SystemClock. DynamoDB
+reads use an optional clock only for missing timestamps. TTL remains derived
+from updated_at plus seven days, and DynamoDB saves never restamp the session.
+"""
+
+from src.dss.application.ports.clock import Clock
+from src.dss.application.ports.session_repository import (
+    SessionStore as SessionStore,
+)
+from src.dss.infrastructure.sessions.clock import SystemClock
+from src.models.session import Session
+
+
+class InMemorySessionStore:
+    """In-memory session store for local development."""
+
+    def __init__(self, clock: Clock | None = None) -> None:
+        self._sessions: dict[str, Session] = {}
+        self._clock: Clock = clock if clock is not None else SystemClock()
+
+    async def get(self, user_id: str) -> Session | None:
+        """Get session by user ID."""
+        session = self._sessions.get(user_id)
+        return session.model_copy(deep=True).with_clock(session.clock) if session else None
+
+    async def save(self, session: Session) -> None:
+        """Save or update session."""
+        updated = session.copy_with(updated_at=self._clock.now())
+        self._sessions[session.user_id] = updated
+
+    async def delete(self, user_id: str) -> None:
+        """Delete session."""
+        self._sessions.pop(user_id, None)
+
+    def clear(self) -> None:
+        """Clear all sessions (for testing)."""
+        self._sessions.clear()
+
+
+class DynamoDBSessionStore:
+    """DynamoDB session store for AWS deployment (Phase 6)."""
+
+    def __init__(
+        self, table_name: str, region: str = "ap-south-1", *, clock: Clock | None = None
+    ) -> None:
+        import boto3
+        self._table_name = table_name
+        self._clock = clock
+        self._dynamodb = boto3.resource("dynamodb", region_name=region)
+        self._table = self._dynamodb.Table(table_name)
+
+    async def get(self, user_id: str) -> Session | None:
+        """Get session by user ID."""
+        import asyncio
+
+        def _get():
+            response = self._table.get_item(
+                Key={"user_id": user_id},
+                ConsistentRead=True,
+            )
+            return response.get("Item")
+
+        item = await asyncio.get_running_loop().run_in_executor(None, _get)
+        if item:
+            return Session.from_dynamodb_item(item, clock=self._clock)
+        return None
+
+    async def save(self, session: Session) -> None:
+        """Save or update session."""
+        import asyncio
+
+        item = session.to_dynamodb_item()
+
+        def _put():
+            self._table.put_item(Item=item)
+
+        await asyncio.get_running_loop().run_in_executor(None, _put)
+
+    async def delete(self, user_id: str) -> None:
+        """Delete session."""
+        import asyncio
+
+        def _delete():
+            self._table.delete_item(Key={"user_id": user_id})
+
+        await asyncio.get_running_loop().run_in_executor(None, _delete)
+
+
+# Global session store instance (configured at startup)
+_session_store: SessionStore | None = None
+
+
+def get_session_store() -> SessionStore:
+    """Get the configured session store."""
+    global _session_store
+    if _session_store is None:
+        # Default to in-memory for local development
+        _session_store = InMemorySessionStore()
+    return _session_store
+
+
+def configure_session_store(store: SessionStore) -> None:
+    """Configure the session store (called at startup)."""
+    global _session_store
+    _session_store = store

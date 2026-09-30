@@ -5,7 +5,15 @@ import json
 import pytest
 
 from src.config import get_settings
-from src.integrations import bedrock_client, embedding_client, grok_client, llm_client
+from src.dss.infrastructure.ai import (
+    bedrock_client,
+    grok_client,
+)
+from src.dss.infrastructure.ai import (
+    fallback_client as llm_fallback_client,
+)
+from src.dss.infrastructure.embeddings import fallback_client, jina_client
+from src.integrations import embedding_client, llm_client
 from src.models.session import UserProfile
 from src.prompts.loader import get_analysis_system_prompt, get_system_prompt
 from src.services import scheme_matcher
@@ -13,10 +21,14 @@ from src.services import scheme_matcher
 
 @pytest.fixture(autouse=True)
 def _reset_singletons() -> None:
-    """Reset cached/singleton state between tests."""
+    """Reset cached/singleton state between tests.
+
+    The adapter singletons moved to the canonical Phase 3 modules, so the resets target those modules. `llm_client` and `embedding_client` stay imported for the re-exported class names the tests below use.
+    """
     get_settings.cache_clear()
-    llm_client._llm_client = None
-    embedding_client._embedding_client = None
+    llm_fallback_client._llm_client = None
+    jina_client._jina_client = None
+    fallback_client._embedding_client = None
 
 
 @pytest.mark.asyncio

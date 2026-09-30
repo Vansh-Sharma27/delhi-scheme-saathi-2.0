@@ -61,10 +61,10 @@ from src.dss.application.ports.work_queue import (
     AIWorkQueue,
     AIWorkType,
 )
-from src.integrations.bhashini import BhashiniClient
-from src.integrations.embedding_client import EMBEDDING_DIM, FallbackEmbeddingClient
+from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
+from src.dss.infrastructure.speech.bhashini import BhashiniClient
+from src.dss.infrastructure.speech.sarvam import SarvamClient
 from src.integrations.llm_client import FallbackLLMClient
-from src.integrations.sarvam import SarvamClient
 from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule
 from src.models.session import Session

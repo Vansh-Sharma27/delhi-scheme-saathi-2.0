@@ -6,10 +6,9 @@ already exists as a Protocol; reuse it"). The legacy module re-exports all
 three names so existing imports (`memory_worker_handler`, tests) keep
 working; the facade is removed in Phase 6.
 
-`AIWorkItem` carries `enqueued_at` as a `datetime` defaulting to
-`datetime.now(UTC)`. That default is the clock concern Phase 3 threads an
-injected `Clock` through; for now the default stays exactly as written so
-behaviour is unchanged.
+`AIWorkItem` carries an explicit `enqueued_at` timestamp. Phase 3 enqueue and
+deserialization helpers accept a Clock and pass its value here. Direct legacy
+construction keeps its UTC wall-time default.
 """
 
 from __future__ import annotations

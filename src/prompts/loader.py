@@ -1,35 +1,24 @@
-"""Prompt template loader."""
+"""Re-export facade for the prompt loader moved in Phase 3.
 
-from pathlib import Path
+Canonical home: ``src.dss.infrastructure.ai.prompts.loader``. This module
+forwards the loader functions so existing imports keep working; it is
+deleted in Phase 6 (spec 2.1, 2.3 contract step). The prompt ``.txt`` files
+moved together with the loader (spec 7.4), so ``PROMPTS_DIR`` resolves beside
+them at the canonical path and no prompt content changed.
+"""
 
-PROMPTS_DIR = Path(__file__).parent
-
-
-def load_prompt(name: str) -> str:
-    """Load a prompt template by name.
-
-    Args:
-        name: Prompt name without extension (e.g., "system_prompt")
-
-    Returns:
-        Prompt template string
-    """
-    prompt_path = PROMPTS_DIR / f"{name}.txt"
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"Prompt template not found: {name}")
-
-
-def get_system_prompt() -> str:
-    """Backward-compatible alias for the analysis system prompt."""
-    return get_analysis_system_prompt()
-
-
-def get_analysis_system_prompt() -> str:
-    """Get the dedicated system prompt for message analysis."""
-    return load_prompt("analysis_system_prompt")
-
-
-def get_generate_response_prompt() -> str:
-    """Get prompt for response generation."""
-    return load_prompt("generate_response")
+from src.dss.infrastructure.ai.prompts.loader import (
+    PROMPTS_DIR as PROMPTS_DIR,
+)
+from src.dss.infrastructure.ai.prompts.loader import (
+    get_analysis_system_prompt as get_analysis_system_prompt,
+)
+from src.dss.infrastructure.ai.prompts.loader import (
+    get_generate_response_prompt as get_generate_response_prompt,
+)
+from src.dss.infrastructure.ai.prompts.loader import (
+    get_system_prompt as get_system_prompt,
+)
+from src.dss.infrastructure.ai.prompts.loader import (
+    load_prompt as load_prompt,
+)
