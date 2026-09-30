@@ -1,12 +1,14 @@
 # Architecture
 
-The [interactive diagrams](diagrams/index.html) provide high-level and detailed source-backed views of this implementation, including all four runtime consumers, voice, memory refresh, and the full conversation-state vocabulary. Open `docs/diagrams/index.html` in a local browser; [the FSM reference](diagrams/state-transitions.md) lists every allowed target.
+The diagrams below render directly on GitHub. Click any diagram for its full-size SVG. The [FSM reference](diagrams/state-transitions.md) lists every allowed target. Each SVG has a matching editable JSON source in `docs/diagrams/`.
 
 Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guidance through Telegram and a direct chat API. It supports Hindi, English, and Hinglish. It provides recommendations and application guidance; it does not submit applications or transfer a conversation to a human operator.
 
+![System architecture and foreground request path](diagrams/architecture.svg)
+
 ## Migration state
 
-Phase 4 domain extraction is implemented and locally verified. Remote review and merge remain pending. Canonical domain values and infrastructure adapters live under `src/dss`; conversation orchestration, rendering, HTTP routes, and composition wiring still live in their existing packages pending Phases 5 and 6.
+Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Canonical domain values and infrastructure adapters live under `src/dss`; conversation orchestration, rendering, HTTP routes, and composition wiring still live in their existing packages pending Phases 5 and 6.
 
 | Area | Current implementation |
 | --- | --- |
@@ -42,6 +44,8 @@ Legacy `src/db`, provider, model, prompt-loader, and catalog paths remain compat
 
 The SAM template defines API Gateway, the API and worker Lambdas, DynamoDB sessions, SQS with a dead-letter queue, an audio bucket, logs, and an error alarm. PostgreSQL is supplied through `DatabaseUrl`; SAM does not provision RDS. Docker Compose provides PostgreSQL 16 with pgvector and the application for local use.
 
+![Runtime ownership and startup across the container API, Lambda API, SQS worker, and operational scripts](diagrams/runtime-surfaces.svg)
+
 ## Conversation handling
 
 The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. The conversation package dependency order is `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
@@ -51,6 +55,16 @@ The ten states are `GREETING`, `SITUATION_UNDERSTANDING`, `PROFILE_COLLECTION`, 
 `ConversationState(str, Enum)` retains six aliases: `UNDERSTANDING`, `MATCHING`, `PRESENTING`, `DETAILS`, `APPLICATION`, and `HANDOFF`. Infrastructure repairs older persisted string values on read. The enum remains a plain string-valued Enum rather than StrEnum.
 
 Profile collection requires a topic first, then age and annual income. Gender and category are requested only when relevant catalog schemes use them. This policy does not add BPL, residency, employment, or disability checks. Deterministic extraction and validation merge with LLM-proposed profile fields.
+
+### Conversation states
+
+This view shows a representative journey, rather than every possible edge. See the [complete transition table](diagrams/state-transitions.md) for all allowed moves.
+
+![Representative journey through all ten conversation states](diagrams/conversation-states.svg)
+
+### Direct chat turn
+
+![Direct chat request sequence, including session loading, bounded AI proposals, optional matching, and persistence](diagrams/sequence.svg)
 
 ## Matching and eligibility
 
@@ -69,6 +83,12 @@ Ranking uses 0.4 times similarity, 0.4 times the evaluated-field match rate, and
 
 Optional AI relevance judging follows deterministic matching. Presentation and clarification thresholds remain 0.6 and 0.45. The judge-skip score and score-gap settings remain 0.85 and 0.15. Legacy evaluated `hybrid_search` and `_calculate_eligibility_match` remain compatibility paths.
 
+![Matching workflow: retrieve, evaluate, filter topics, reject failing checks, rank, and truncate](diagrams/workflow.svg)
+
+### Catalog and profile data
+
+![Scheme data lineage from seed catalog and database hydration to supplied profile values and domain evaluation](diagrams/dataflow.svg)
+
 ## Providers and failure handling
 
 - LLM: Bedrock is preferred when `USE_BEDROCK=true`; Grok is used when configured as the fallback or primary local provider. The default Bedrock identifier is `global.amazon.nova-2-lite-v1:0`; this does not establish India-only processing.
@@ -77,6 +97,10 @@ Optional AI relevance judging follows deterministic matching. Presentation and c
 - Telegram: text and inline keyboards are sent through the existing client. TTS audio is sent directly as bytes; the current response path does not upload audio to S3. Text above 900 characters skips TTS.
 
 `AIOrchestrator` applies timeouts of 8 seconds for analysis, 3 seconds for relevance judging, 8 seconds for response generation, and 20 seconds for background memory refresh. It records task telemetry and returns task-specific safe outputs on failure. A missing API database pool produces `503`; `/health` reports database state in its JSON response, including disconnected or error states.
+
+### Telegram voice turn
+
+![Telegram voice sequence with provider selection, language probing, confidence checks, transcript echo, text delivery, and conditional audio](diagrams/voice-sequence.svg)
 
 ## Persistence and memory
 
@@ -87,6 +111,14 @@ Sessions retain the last 12 messages, or six completed turns, and working memory
 An injected clock is private session state and is excluded from serialization. Copies and resets preserve its identity. `Session.copy_with` supplies the default update timestamp. DynamoDB saves preserve `updated_at`; in-memory saves refresh it. DynamoDB TTL is an integer timestamp derived from `updated_at` plus seven days. Reads do not themselves reject an expired item, and DynamoDB deletion is asynchronous.
 
 The database schema is `scripts/init-db/01-schema.sql`. It includes schemes, documents, offices, rejection rules, and life-event taxonomy; scheme vectors have 1024 dimensions with a cosine HNSW index. There is no schema migration framework. Bundled metadata can override scheme tags during hydration but is not a replacement database during an outage.
+
+### Session lifecycle
+
+![Session lifecycle covering creation, turn saves, memory refresh, resets, and asynchronous DynamoDB expiry](diagrams/lifecycle.svg)
+
+### Background memory refresh
+
+![Working-memory flow with enqueue thresholds, reference-only queue payloads, latest-session reads, summary generation, and whole-item-write races](diagrams/memory-dataflow.svg)
 
 ## Security boundaries and known limits
 

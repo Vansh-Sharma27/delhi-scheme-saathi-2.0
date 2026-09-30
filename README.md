@@ -109,7 +109,9 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 
 ## Architecture
 
-Explore [the interactive diagrams](docs/diagrams/index.html): system and runtime architecture, matching workflow, chat and voice sequences, catalog and memory data flows, and session and conversation lifecycles. GitHub displays HTML source; open `docs/diagrams/index.html` in a browser from your local checkout. The [FSM reference](docs/diagrams/state-transitions.md) lists every allowed transition.
+![System architecture: Telegram and API ingress, conversation control, session storage, AI, scheme retrieval, and domain eligibility evaluation](docs/diagrams/architecture.svg)
+
+See [the architecture guide](docs/ARCHITECTURE.md) for all nine diagrams, viewable directly on GitHub, and [the FSM reference](docs/diagrams/state-transitions.md) for every allowed transition. Click a diagram to open its full-size SVG. Editable JSON sources are kept alongside the SVGs in `docs/diagrams/`.
 
 The system uses a 10-state finite state machine (FSM) to manage conversation flow:
 
