@@ -1,4 +1,4 @@
-"""Access canonical scheme metadata bundled with the repository."""
+"""Load canonical scheme metadata and supply it to domain policy."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from src.dss.domain.profiles.required_fields import required_profile_fields
 
+logger = logging.getLogger(__name__)
 _CATALOG_PATH = Path(__file__).resolve().parents[2] / "data" / "all_schemes.json"
-_INCOME_SEGMENT_KEYS = {"EWS", "LIG", "MIG", "HIG"}
 
 
 @lru_cache(maxsize=1)
@@ -43,7 +43,6 @@ def get_canonical_scheme_ids_for_life_event(life_event: str | None) -> list[str]
     """Return bundled scheme ids mapped to a life event."""
     if not life_event:
         return []
-
     matching_ids: list[str] = []
     for scheme_id, scheme in _load_catalog().items():
         if life_event in scheme.get("life_events", []):
@@ -69,62 +68,6 @@ def get_canonical_tags(scheme_id: str) -> list[str]:
 
 @lru_cache(maxsize=32)
 def get_required_profile_fields_for_life_event(life_event: str | None) -> tuple[str, ...]:
-    """Return the minimum profile fields worth collecting for a life event.
-
-    The bot always needs the topic first. Beyond that, age and annual income
-    are kept as shared core filters, while category/gender are only requested
-    when at least one canonical scheme for the life event actually uses them.
-    """
-    if not life_event:
-        return ("life_event",)
-
-    required_fields = ["life_event", "age", "annual_income"]
-    needs_category = False
-    needs_gender = False
-
-    for scheme in _load_catalog().values():
-        if life_event not in scheme.get("life_events", []):
-            continue
-
-        eligibility = scheme.get("eligibility") or {}
-        raw_categories = {
-            str(value).strip().upper()
-            for value in eligibility.get("categories", [])
-            if str(value).strip()
-        }
-        explicit_caste_categories = {
-            str(value).strip().upper()
-            for value in eligibility.get("caste_categories", [])
-            if str(value).strip()
-        }
-        genders = {
-            str(value).strip().lower()
-            for value in eligibility.get("genders", ["all"])
-            if str(value).strip()
-        }
-        income_by_category = {
-            str(key).strip().upper()
-            for key in (eligibility.get("income_by_category") or {})
-            if str(key).strip()
-        }
-
-        income_segment_categories = (raw_categories | income_by_category) & _INCOME_SEGMENT_KEYS
-        normalized_caste_categories = explicit_caste_categories
-        if (
-            not normalized_caste_categories
-            and raw_categories
-            and not income_segment_categories
-            and raw_categories != {"ALL"}
-        ):
-            normalized_caste_categories = raw_categories
-
-        if normalized_caste_categories:
-            needs_category = True
-        if genders and genders != {"all"}:
-            needs_gender = True
-
-    if needs_gender:
-        required_fields.append("gender")
-    if needs_category:
-        required_fields.append("category")
-    return tuple(required_fields)
+    """Supply catalog data to the unchanged required-field policy."""
+    # Preserve the no-topic path without reading the catalog.
+    return required_profile_fields(life_event, _load_catalog().values() if life_event else ())
