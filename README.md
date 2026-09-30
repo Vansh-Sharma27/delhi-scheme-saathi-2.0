@@ -37,13 +37,20 @@ In Telegram, try `/help` first. The bot now also exposes `/start`, `/help`, and 
 ```
 delhi-scheme-saathi-2.0/
 ├── src/
-│   ├── models/          # Pydantic data models
-│   ├── db/              # Database repositories
-│   ├── services/        # Business logic (FSM, matching, extraction)
-│   ├── integrations/    # External APIs (LLM, embeddings, Telegram)
-│   ├── prompts/         # LLM prompt templates
-│   ├── utils/           # Validators, keyboards, logging, scheme catalog
-│   └── webhook/         # Telegram webhook handler
+│   ├── dss/
+│   │   ├── domain/         # Profiles, schemes, conversations, eligibility
+│   │   ├── application/    # Ports; use-case packages await Phase 5
+│   │   ├── infrastructure/ # Database, sessions, queues, AI, embeddings, speech
+│   │   ├── interfaces/     # API/Telegram packages await Phase 5
+│   │   └── bootstrap/      # Composition root awaits Phase 6
+│   ├── models/             # API models and legacy domain compatibility paths
+│   ├── db/                 # Pool lifecycle and repository compatibility paths
+│   ├── services/           # Current conversation, matching, and rendering services
+│   ├── integrations/       # Provider compatibility paths and Telegram client
+│   ├── prompts/            # Legacy loader; templates live under infrastructure/ai
+│   ├── utils/              # Validators, keyboards, logging, catalog facade
+│   ├── webhook/            # Telegram webhook handler
+│   └── main.py             # Current FastAPI entrypoint and wiring
 ├── data/                # Seed data (schemes, documents, offices)
 ├── scripts/             # Database seeding and utilities
 ├── tests/               # Unit and integration tests
@@ -55,7 +62,7 @@ delhi-scheme-saathi-2.0/
 ### Prerequisites
 
 - Docker and Docker Compose
-- API keys for: xAI (Grok), Voyage AI, Telegram Bot
+- API keys for xAI (Grok), Telegram, and at least one embedding provider. The embedding-generation script currently requires `VOYAGE_API_KEY`, even when Jina handles the request.
 
 ### Setup
 
@@ -113,10 +120,9 @@ From `SCHEME_DETAILS` the user can move freely between the four per-scheme
 views — `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS` and
 `APPLICATION_HELP` — or back to the scheme list.
 
-Scheme matching uses a 3-stage hybrid approach:
-1. **SQL Filter**: Life event and eligibility criteria
-2. **Vector Search**: Semantic similarity using pgvector
-3. **Ranking**: Combined score with eligibility match details
+Scheme matching retrieves SQL-filtered candidates in vector-similarity order, or benefit-amount order when embeddings are unavailable. It then evaluates eligibility, filters topic mismatches, drops candidates with any failing field, ranks, and truncates. The evaluator checks age, gender, caste category, and income/income segments; other stored criteria are not evaluated yet.
+
+Phase 4 domain extraction is implemented and verified locally. Application services, interfaces, and final composition wiring are still pending Phases 5 and 6. Legacy compatibility paths remain until Phase 6; remote Phase 4 review and merge are pending.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, and
 [docs/adr/](docs/adr/README.md) for the decisions behind it — what was chosen,
@@ -182,8 +188,8 @@ See `.env.example` for the full list. The ones that matter most:
 | `JINA_API_KEY` | Jina AI key for embeddings (primary) |
 | `VOYAGE_API_KEY` | Voyage AI key for embeddings (fallback) |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
-| `SARVAM_API_KEY` | Sarvam AI key for voice; without it voice is disabled |
-| `BHASHINI_API_KEY` | Bhashini voice fallback (with `BHASHINI_USER_ID`, `BHASHINI_ULCA_API_KEY`) |
+| `SARVAM_API_KEY` | Preferred voice provider when configured |
+| `BHASHINI_API_KEY` | Voice provider selected when Sarvam is not configured (with `BHASHINI_USER_ID`, `BHASHINI_ULCA_API_KEY`) |
 | `USE_BEDROCK` | `true` routes the LLM through AWS Bedrock with Grok as fallback |
 | `AI_MEMORY_QUEUE_BACKEND` | `in_memory` locally, `sqs` for shared AWS queue |
 | `AI_MEMORY_QUEUE_URL` | SQS queue URL for async working-memory jobs |

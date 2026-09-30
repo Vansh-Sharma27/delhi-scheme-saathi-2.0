@@ -1,312 +1,99 @@
 # Architecture
 
-This document describes the technical architecture of Delhi Scheme Saathi.
+Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guidance through Telegram and a direct chat API. It supports Hindi, English, and Hinglish. It provides recommendations and application guidance; it does not submit applications or transfer a conversation to a human operator.
 
-## System Overview
+## Migration state
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Telegram                                │
-│                     (User Interface)                            │
-└─────────────────────────┬───────────────────────────────────────┘
-                          │ Webhook
-                          ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      FastAPI Server                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │   Webhook    │  │   REST API   │  │    Chat Endpoint     │  │
-│  │   Handler    │  │  /api/...    │  │     /api/chat        │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘  │
-│         │                 │                      │              │
-│         └─────────────────┼──────────────────────┘              │
-│                           ▼                                     │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                 Conversation Service                      │  │
-│  │  ┌─────────┐  ┌───────────┐  ┌────────────────────────┐  │  │
-│  │  │   FSM   │  │  Profile  │  │   Response Generator   │  │  │
-│  │  │ Engine  │  │ Extractor │  │                        │  │  │
-│  │  └────┬────┘  └─────┬─────┘  └───────────┬────────────┘  │  │
-│  │       │             │                     │               │  │
-│  │       └─────────────┼─────────────────────┘               │  │
-│  └──────────────────────┼────────────────────────────────────┘  │
-│                         ▼                                       │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                    Service Layer                          │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐   │  │
-│  │  │   Scheme    │  │  Document   │  │   Rejection     │   │  │
-│  │  │   Matcher   │  │  Resolver   │  │   Engine        │   │  │
-│  │  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘   │  │
-│  └─────────┼────────────────┼──────────────────┼────────────┘  │
-│            │                │                  │                │
-│            └────────────────┼──────────────────┘                │
-│                             ▼                                   │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                  Repository Layer                         │  │
-│  │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────┐ │  │
-│  │  │  Schemes   │ │  Documents │ │  Offices   │ │Sessions│ │  │
-│  │  └─────┬──────┘ └─────┬──────┘ └─────┬──────┘ └───┬────┘ │  │
-│  └────────┼──────────────┼──────────────┼────────────┼──────┘  │
-└───────────┼──────────────┼──────────────┼────────────┼──────────┘
-            │              │              │            │
-            ▼              ▼              ▼            ▼
-┌───────────────────────────────────┐  ┌──────────────────────────┐
-│         PostgreSQL + pgvector     │  │    In-Memory Store       │
-│  ┌─────────┐ ┌─────────┐ ┌─────┐  │  │    (Sessions)            │
-│  │ Schemes │ │Documents│ │Offi │  │  │                          │
-│  │ +vector │ │         │ │ ces │  │  │                          │
-│  └─────────┘ └─────────┘ └─────┘  │  └──────────────────────────┘
-└───────────────────────────────────┘
+Phase 4 domain extraction is implemented and locally verified. Remote review and merge remain pending. Canonical domain values and infrastructure adapters live under `src/dss`; conversation orchestration, rendering, HTTP routes, and composition wiring still live in their existing packages pending Phases 5 and 6.
 
-            │                              │
-            ▼                              ▼
-┌───────────────────────────────────────────────────────────────────┐
-│                        External APIs                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐   │
-│  │   xAI (Grok)    │  │   Voyage AI     │  │   Telegram API  │   │
-│  │   LLM Client    │  │   Embeddings    │  │   Bot Client    │   │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘   │
-└───────────────────────────────────────────────────────────────────┘
-```
+| Area | Current implementation |
+| --- | --- |
+| Domain profiles and required-field policy | `src/dss/domain/profiles/` |
+| Domain schemes, documents, offices, rejection rules | `src/dss/domain/schemes/` |
+| Conversation state, session, memory, shared clock type | `src/dss/domain/conversations/` |
+| Eligibility evaluation | `src/dss/domain/eligibility/evaluator.py` |
+| Application ports | `src/dss/application/ports/` |
+| SQL repositories, pool-holding adapters, catalog loading, scheme hydration | `src/dss/infrastructure/database/` |
+| Session stores, clock adapter, persisted-state repair | `src/dss/infrastructure/sessions/` |
+| Queue adapters and payload codec | `src/dss/infrastructure/queues/` |
+| AI providers and unchanged prompt templates | `src/dss/infrastructure/ai/` |
+| Embeddings and speech adapters | `src/dss/infrastructure/embeddings/`, `src/dss/infrastructure/speech/` |
+| Conversation pipeline and rendering | `src/services/conversation/`, `src/services/response_generator.py` |
+| Matching orchestration | `src/services/scheme_matcher.py` |
+| FastAPI routes and Telegram handling | `src/main.py`, `src/webhook/handler.py` |
+| Settings and credential redaction | `src/config.py`, `src/utils/logging_config.py` |
 
-## Components
+Import-linter enforces three contracts: the six-module conversation order, the modular-monolith layer direction, and the restriction on new `src.dss` imports of legacy wiring. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
 
-### 1. Webhook Handler (`src/webhook/handler.py`)
+Domain code imports no application, infrastructure, or legacy project modules. Infrastructure supplies catalog values to the pure required-fields policy. The application clock import re-exports the domain `Clock` Protocol with the same type identity.
 
-Receives Telegram updates and routes them to the conversation service:
-- Parses incoming messages (text, voice, callbacks)
-- Sends typing indicators
-- Dispatches responses back to Telegram
+Legacy `src/db`, provider, model, prompt-loader, and catalog paths remain compatibility surfaces until Phase 6. Legacy `Session`, `UserProfile`, and `Scheme` subclasses retain standalone hydration and no-argument catalog helpers. Production services and ports use canonical domain types.
 
-### 2. Conversation Service (`src/services/conversation/`)
+## Four consumer surfaces
 
-Main orchestrator that handles the conversation flow. One user message is
-one turn, and `service.ConversationService.handle_message` runs the same
-pipeline every time: load session → short-circuit commands and callbacks →
-analyse → settle language → update profile → pick next state → render →
-persist.
+| Surface | Entrypoint | Lifecycle |
+| --- | --- | --- |
+| Container API | `src/main.py`, started by `scripts/container_start.py` | FastAPI lifespan creates the database pool and starts the local background worker when configured |
+| Lambda API | `src.lambda_handler.handler` | Mangum currently uses `lifespan="auto"`; final lifecycle separation is Phase 6 work |
+| SQS worker | `src.memory_worker_handler.handler` | Processes working-memory messages and reports batch failures |
+| Operational scripts | `scripts/fork_session.py` and other utilities | Use current import surfaces; session inspection requires a shared store |
 
-The package is split by what each layer needs to know, and dependencies run
-strictly in this order:
+The SAM template defines API Gateway, the API and worker Lambdas, DynamoDB sessions, SQS with a dead-letter queue, an audio bucket, logs, and an error alarm. PostgreSQL is supplied through `DatabaseUrl`; SAM does not provision RDS. Docker Compose provides PostgreSQL 16 with pgvector and the application for local use.
 
-| Module | Responsibility |
-|--------|----------------|
-| `language.py` | What language to read the message in and reply in |
-| `intents.py` | What the user is asking for, from the message alone |
-| `scheme_reference.py` | Which scheme the user means ("2", "second", by name) |
-| `turn_policy.py` | Decisions that also need session and profile state |
-| `views.py` | The plain text sent back to the user |
-| `service.py` | The turn pipeline itself |
+## Conversation handling
 
-The LLM proposes and the deterministic layers dispose: anything the LLM
-returns that conflicts with the plain meaning of the user's own words is
-overridden, because a fluent wrong answer is worse here than a plain one.
+The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. The conversation package dependency order is `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
 
-### 3. FSM Engine (`src/services/fsm.py`)
+The ten states are `GREETING`, `SITUATION_UNDERSTANDING`, `PROFILE_COLLECTION`, `SCHEME_MATCHING`, `SCHEME_PRESENTATION`, `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS`, `APPLICATION_HELP`, and `CSC_HANDOFF`. The four scheme views can move between one another and back to the list. `src/services/fsm.py` owns the transition table.
 
-10-state finite state machine managing conversation flow:
+`ConversationState(str, Enum)` retains six aliases: `UNDERSTANDING`, `MATCHING`, `PRESENTING`, `DETAILS`, `APPLICATION`, and `HANDOFF`. Infrastructure repairs older persisted string values on read. The enum remains a plain string-valued Enum rather than StrEnum.
 
-| State | Purpose |
-|-------|---------|
-| GREETING | Welcome message, initial interaction |
-| SITUATION_UNDERSTANDING | Establish which life event brought the user here |
-| PROFILE_COLLECTION | Collect age, gender, category, income |
-| SCHEME_MATCHING | Transient state while searching schemes |
-| SCHEME_PRESENTATION | Display matched schemes |
-| SCHEME_DETAILS | Deep dive into selected scheme |
-| DOCUMENT_GUIDANCE | Documents required, and where to get them |
-| REJECTION_WARNINGS | Common reasons this application gets rejected |
-| APPLICATION_HELP | Step-by-step application guidance |
-| CSC_HANDOFF | Transfer to a service centre |
+Profile collection requires a topic first, then age and annual income. Gender and category are requested only when relevant catalog schemes use them. This policy does not add BPL, residency, employment, or disability checks. Deterministic extraction and validation merge with LLM-proposed profile fields.
 
-`ConversationState` also defines short aliases (`UNDERSTANDING`, `MATCHING`,
-`PRESENTING`, `DETAILS`, `APPLICATION`, `HANDOFF`) that point at the states
-above, kept for older code paths and tests.
+## Matching and eligibility
 
-State transitions:
-```
-GREETING ─────▶ SITUATION_UNDERSTANDING ─────▶ PROFILE_COLLECTION
-                                                       │
-           ┌───────────────────────────────────────────┘
-           │ (profile complete)
-           ▼
-   SCHEME_MATCHING ────▶ SCHEME_PRESENTATION ────▶ SCHEME_DETAILS
-           │                                              │
-           │ (no schemes)                                 ▼
-           ▼                            DOCUMENT_GUIDANCE / REJECTION_WARNINGS
-   PROFILE_COLLECTION                        / APPLICATION_HELP
-   (or SITUATION_UNDERSTANDING                        │
-    when the topic is unknown)                        ▼
-                                                 CSC_HANDOFF
-```
+The exact matching order is:
 
-The four scheme views reachable from `SCHEME_DETAILS` transition freely
-between one another and back to `SCHEME_PRESENTATION`; see
-`fsm.get_valid_transitions` for the exact table.
+1. Retrieve SQL-filtered candidates. Canonical catalog IDs take precedence over database life-event tags. SQL checks age bounds and maximum income when profile values are present.
+2. Evaluate every candidate in the domain.
+3. Apply topic consistency, falling back to the scheme's runtime life events when canonical metadata is unavailable.
+4. Drop candidates with any eligibility field equal to `False`.
+5. Rank survivors.
+6. Truncate to the requested limit.
 
-### 4. Profile Extractor (`src/services/profile_extractor.py`)
+Retrieval fetches `max(limit * 3, 10)` candidates. It orders by pgvector cosine distance when a valid embedding exists, otherwise by `benefits_amount DESC NULLS LAST`. The matcher accepts only 1024-dimensional embeddings. Embedding failure disables vector ranking rather than sending a malformed vector.
 
-Extracts user information from natural language:
-- Rule-based regex patterns for common formats
-- LLM-based extraction for complex cases
-- Supports Hindi, English, and Hinglish
+Ranking uses 0.4 times similarity, 0.4 times the evaluated-field match rate, and 0.2 times benefit amount normalized against ten lakh and capped at one. The domain evaluator checks age, gender, caste category, and income/income-segment rules. Residency, employment, education, BPL, disability, other conditions, and special-focus groups are stored but currently omitted from evaluation. Matching is not a final eligibility determination.
 
-Extracted fields:
-- Age, gender, marital status
-- Category (SC/ST/OBC/General/EWS)
-- Annual income, employment status
-- Life event, district, BPL status
+Optional AI relevance judging follows deterministic matching. Presentation and clarification thresholds remain 0.6 and 0.45. The judge-skip score and score-gap settings remain 0.85 and 0.15. Legacy evaluated `hybrid_search` and `_calculate_eligibility_match` remain compatibility paths.
 
-### 5. Scheme Matcher (`src/services/scheme_matcher.py`)
+## Providers and failure handling
 
-3-stage hybrid search for scheme matching:
+- LLM: Bedrock is preferred when `USE_BEDROCK=true`; Grok is used when configured as the fallback or primary local provider. The default Bedrock identifier is `global.amazon.nova-2-lite-v1:0`; this does not establish India-only processing.
+- Embeddings: Jina `jina-embeddings-v3` is primary, Voyage `voyage-multilingual-2` is fallback, then vector ranking is skipped.
+- Speech: the webhook selects Sarvam when its key exists, otherwise Bhashini when configured. It does not retry Bhashini automatically after a selected Sarvam client fails. Unavailable or low-confidence speech requests fall back to text; the confidence threshold is 0.5.
+- Telegram: text and inline keyboards are sent through the existing client. TTS audio is sent directly as bytes; the current response path does not upload audio to S3. Text above 900 characters skips TTS.
 
-**Stage 1: Life Event Filter**
-```sql
-WHERE $life_event = ANY(life_events)
-```
+`AIOrchestrator` applies timeouts of 8 seconds for analysis, 3 seconds for relevance judging, 8 seconds for response generation, and 20 seconds for background memory refresh. It records task telemetry and returns task-specific safe outputs on failure. A missing API database pool produces `503`; `/health` reports database state in its JSON response, including disconnected or error states.
 
-**Stage 2: Eligibility Filter**
-```sql
-AND (eligibility->>'min_age')::int <= $age
-AND (eligibility->>'max_income')::int >= $income
-```
+## Persistence and memory
 
-**Stage 3: Vector Similarity**
-```sql
-ORDER BY description_embedding <=> $query_embedding
-```
+Scheme, eligibility, document, office, rejection-rule, candidate, and match models are frozen Pydantic models. `UserProfile`, `Session`, and `ConversationMemory` are mutable values with copy/merge helpers.
 
-### 6. Document Resolver (`src/services/document_resolver.py`)
+Sessions retain the last 12 messages, or six completed turns, and working memory containing a summary, profile facts, active schemes, pending action, and last goal. Background refresh is triggered by the configured turn interval or the estimated context-size threshold. Defaults are eight turns and approximately 6000 tokens. Queue and worker policy remains in `src/services/ai_background.py`.
 
-Resolves document prerequisite chains using DFS:
-```
-Income Certificate
-  └── Aadhaar Card
-  └── Ration Card
-      └── Aadhaar Card (already resolved)
-```
+An injected clock is private session state and is excluded from serialization. Copies and resets preserve its identity. `Session.copy_with` supplies the default update timestamp. DynamoDB saves preserve `updated_at`; in-memory saves refresh it. DynamoDB TTL is an integer timestamp derived from `updated_at` plus seven days. Reads do not themselves reject an expired item, and DynamoDB deletion is asynchronous.
 
-Returns flat list in procurement order.
+The database schema is `scripts/init-db/01-schema.sql`. It includes schemes, documents, offices, rejection rules, and life-event taxonomy; scheme vectors have 1024 dimensions with a cosine HNSW index. There is no schema migration framework. Bundled metadata can override scheme tags during hydration but is not a replacement database during an outage.
 
-### 7. LLM Client (`src/integrations/llm_client.py`)
+## Security boundaries and known limits
 
-OpenAI-compatible client for xAI's Grok:
-- Single-call message analysis (intent, life event, profile extraction)
-- Response generation with context
-- Conversation summarization
+`POST /api/chat` prefixes caller-supplied IDs with `api:` before accessing the store. It cannot resume a Telegram user's session with the same numeric ID. `CHAT_API_KEY`, when configured, adds a constant-time header check. Telegram webhook verification depends on a non-empty `TELEGRAM_WEBHOOK_SECRET`. The current Compose and SAM definitions do not supply these two secrets.
 
-Uses structured JSON output for reliable parsing.
+Credential redaction attaches filters to logging handlers. It does not establish that all personal data is excluded from logs; existing paths still log session identifiers, profile details, or transcripts. Other retained limitations include whole-item session writes without concurrency protection, no Telegram update deduplication, no application rate limiter, and seed timestamps that do not preserve source verification dates.
 
-### 8. Embedding Client (`src/integrations/embedding_client.py`)
+## Verification
 
-Voyage AI client for multilingual embeddings:
-- Model: `voyage-multilingual-2`
-- Dimension: 1024
-- Used for semantic scheme search
+Tests live under `tests/`. The golden corpus covers 14 synthetic scenarios with exact response and session comparisons. It supplies synthetic evaluated facts at the evaluation seam; separate SQL, operation-order, and evaluator-equivalence tests exercise the extracted boundaries. Hypothesis compares the domain evaluator with an independent frozen original across generated profiles and schemes.
 
-## Database Schema
-
-### Core Tables
-
-**schemes**
-- Primary scheme data with eligibility as JSONB
-- `description_embedding` as vector(1024) for similarity search
-- HNSW index for fast vector queries
-
-**documents**
-- Document metadata with prerequisites
-- Procurement guidance (fees, authorities, processing time)
-
-**offices**
-- Government office locations
-- Services offered, working hours
-
-**rejection_rules**
-- Common rejection reasons by scheme
-- Severity levels (critical, high, warning)
-- Prevention tips
-
-### Indexes
-
-```sql
--- Vector similarity search (HNSW)
-CREATE INDEX idx_schemes_embedding ON schemes
-    USING hnsw (description_embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
-
--- Life event filtering
-CREATE INDEX idx_schemes_life_events ON schemes USING GIN (life_events);
-
--- Eligibility JSONB queries
-CREATE INDEX idx_schemes_eligibility ON schemes USING GIN (eligibility);
-```
-
-## Data Models
-
-### Pydantic Models (Immutable)
-
-All domain models use `frozen=True` for immutability:
-
-```python
-class Scheme(BaseModel, frozen=True):
-    id: str
-    name: str
-    eligibility: EligibilityCriteria
-    ...
-
-class UserProfile(BaseModel):
-    age: int | None = None
-    category: str | None = None
-    ...
-
-    def merge_with(self, other: "UserProfile") -> "UserProfile":
-        # Immutable merge - returns new instance
-```
-
-### Session Management
-
-Sessions track conversation state:
-- Current FSM state
-- User profile (accumulated)
-- Message history (sliding window of 10)
-- Discussed schemes
-
-## Request Flow
-
-1. **Telegram webhook** receives update
-2. **Handler** extracts message and user info
-3. **Conversation service** loads session
-4. **LLM** analyzes message (intent, entities, life event)
-5. **Profile extractor** updates user profile
-6. **FSM** determines next state
-7. **Scheme matcher** finds relevant schemes (if needed)
-8. **Response generator** creates bilingual response
-9. **Session** saved with updated state
-10. **Telegram client** sends response
-
-## Configuration
-
-Environment-based configuration via Pydantic Settings:
-
-```python
-class Settings(BaseSettings, frozen=True):
-    database_url: str
-    xai_api_key: str
-    voyage_api_key: str
-    telegram_bot_token: str
-    log_level: str = "INFO"
-```
-
-## Error Handling
-
-- Database errors return 503 Service Unavailable
-- LLM failures fall back to generic responses
-- Embedding failures disable vector search (SQL-only matching)
-- All errors logged with context
-
-## Performance Considerations
-
-- Connection pooling (asyncpg, min=2, max=10)
-- HNSW index for O(log n) vector search
-- Session sliding window limits memory
-- Async throughout for concurrency
+CI runs Python 3.11.16 with pinned dependencies, pytest, Ruff, import-linter, dependency synchronization, executable-bit checks, a mypy fingerprint delta, and a locked dependency audit. CodeQL runs in a separate workflow. CI does not deploy the application. Historical baseline counts are recorded in `docs/migration/BASELINE.md`; they are not the current suite size.

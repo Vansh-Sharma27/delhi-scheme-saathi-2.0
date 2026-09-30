@@ -5,10 +5,10 @@ This guide walks you through setting up Delhi Scheme Saathi locally.
 ## Prerequisites
 
 - **Docker** (20.10+) and **Docker Compose** (v2)
-- **Python 3.10+** (for running scripts outside container)
+- **Python 3.11** (for running scripts outside the container; CI and the image use 3.11.16)
 - API keys:
   - [xAI API Key](https://x.ai/) for Grok LLM
-  - [Voyage AI Key](https://www.voyageai.com/) for embeddings
+  - [Jina AI Key](https://jina.ai/) for primary embeddings and/or [Voyage AI Key](https://www.voyageai.com/) for fallback embeddings
   - [Telegram Bot Token](https://core.telegram.org/bots#creating-a-new-bot) from BotFather
 
 ## Step 1: Clone and Configure
@@ -35,7 +35,7 @@ LOG_LEVEL=INFO
 
 Embeddings use Jina first and fall back to Voyage, so `JINA_API_KEY` is the one
 to set if you only configure one. See `.env.example` for voice and access
-control keys.
+control keys. The current Compose definition forwards Voyage but does not forward Jina, Sarvam, Bhashini, `CHAT_API_KEY`, or `TELEGRAM_WEBHOOK_SECRET`; setting those only in `.env` does not enable them inside that container. Configure the required environment explicitly for the deployment you use.
 
 ## Step 2: Start Services
 
@@ -83,42 +83,10 @@ docker compose up -d
 
 ## Step 5: Generate Embeddings
 
-Generate semantic embeddings for scheme search:
+Generate semantic embeddings using the existing script and locked dependencies. The script currently requires `VOYAGE_API_KEY` even if the provider client uses Jina first.
 
 ```bash
-# Using Python directly (with .env loaded)
-pip install python-dotenv asyncpg voyageai
-
-python3 << 'EOF'
-import asyncio
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
-import asyncpg
-import voyageai
-
-async def generate():
-    pool = await asyncpg.create_pool(
-        'postgresql://postgres:postgres@localhost:5434/delhi_scheme_saathi'
-    )
-    client = voyageai.Client(api_key=os.environ['VOYAGE_API_KEY'])
-
-    rows = await pool.fetch("SELECT id, description, description_hindi FROM schemes")
-    for row in rows:
-        text = f"{row['description']}\n\n{row['description_hindi']}"
-        result = client.embed([text], model="voyage-multilingual-2")
-        embedding = result.embeddings[0]
-        embedding_str = f"[{','.join(map(str, embedding))}]"
-        await pool.execute(
-            "UPDATE schemes SET description_embedding = $1::vector WHERE id = $2",
-            embedding_str, row['id']
-        )
-        print(f"Generated embedding for {row['id']}")
-    await pool.close()
-
-asyncio.run(generate())
-EOF
+docker compose exec app python scripts/generate_embeddings.py
 ```
 
 ## Step 6: Test the Chat API
@@ -168,12 +136,12 @@ pytest tests/ --cov=src --cov-report=term-missing
 
 ## Step 8: Voice Integration with Sarvam AI (Optional)
 
-Sarvam AI provides high-quality Indian language voice services with 1000 free credits on signup.
+Sarvam AI provides the preferred STT/TTS integration. Check its current account terms before enabling live calls.
 
 ### Getting Sarvam AI API Keys
 
 1. Visit [Sarvam AI Console](https://console.sarvam.ai/)
-2. Sign up for a developer account (1000 free credits included)
+2. Sign up for a developer account
 3. Create an API subscription key from the dashboard
 4. Add to your `.env` file:
 
@@ -183,7 +151,7 @@ SARVAM_API_KEY=your-api-subscription-key
 
 ### Alternative: Bhashini (Fallback)
 
-If Sarvam AI is unavailable, you can use Bhashini (requires paid subscription):
+If Sarvam is not configured, the webhook selects Bhashini when its key is set. It does not automatically switch providers after a Sarvam request fails.
 1. Visit [Bhashini ULCA Portal](https://bhashini.gov.in/ulca)
 2. Register for a developer account
 3. Add to `.env`:
@@ -191,6 +159,7 @@ If Sarvam AI is unavailable, you can use Bhashini (requires paid subscription):
 ```env
 BHASHINI_API_KEY=your-api-key
 BHASHINI_USER_ID=your-user-id
+BHASHINI_ULCA_API_KEY=your-ulca-api-key
 ```
 
 ### Testing Voice Integration
@@ -254,5 +223,5 @@ lsof -i :5434
 - View app logs: `docker compose logs app`
 
 ### Embeddings Not Working
-- Verify `VOYAGE_API_KEY` is correct
+- Verify the configured embedding-provider keys and the container environment
 - Check if embeddings exist: `docker exec dss-postgres psql -U postgres -d delhi_scheme_saathi -c "SELECT id, description_embedding IS NOT NULL as has_emb FROM schemes;"`

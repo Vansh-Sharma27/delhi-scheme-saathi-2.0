@@ -1,5 +1,13 @@
 # Delhi Scheme Saathi - Requirements Document
 
+## Status
+
+This document records product requirements and acceptance targets, not a completed-feature checklist. Current behavior is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/WHAT_THIS_BOT_CAN_DO.md](docs/WHAT_THIS_BOT_CAN_DO.md). The bundled dataset has five schemes and 16 offices; the 5-15 schemes per life event and 500+ CSC targets are not met. Accuracy, latency, uptime, and user-outcome targets below are not established by the migration tests.
+
+Automated matching currently evaluates age, gender, caste category, and income/income segments only. SQL checks age and maximum income, then domain evaluation handles other supported checks. Residency, education, employment, BPL, and disability restrictions are not enforced by the evaluator. The bot gives guidance without submitting applications or transferring a conversation to an operator.
+
+ElastiCache, read replicas, CDN delivery, automated monthly verification, the proposed classification dataset, and an application rate limiter are not implemented. The SAM template does not explicitly configure the stated per-user throttling. Voice confidence uses 0.5 in the current webhook. Session TTL is fixed at seven days after `updated_at`, not configurable, and DynamoDB cleanup is asynchronous. Global Bedrock inference and external fallback providers do not establish India-only processing. Existing logs can contain personal data; credential redaction is not a general personal-data filter.
+
 ## Project Overview
 
 **Project Name:** Delhi Scheme Saathi  
@@ -101,9 +109,9 @@ A voice-first Telegram chatbot that goes beyond awareness to provide complete ex
 - AC4.4: Stage 3 semantic ranking using Jina AI (primary) / Voyage AI (fallback) embeddings (1024-dim, pgvector HNSW index)
 - AC4.5: Optional LLM-based relevance judging when deterministic scores are ambiguous (score < 0.85 or top-two gap < 0.15)
 - AC4.6: Return top 5 schemes ranked by composite relevance score
-- AC4.5: Retrieval latency < 500ms
-- AC4.6: Precision > 80% (returned schemes are relevant)
-- AC4.7: Recall > 70% (relevant schemes are returned)
+- AC4.7: Retrieval latency < 500ms
+- AC4.8: Precision > 80% (returned schemes are relevant)
+- AC4.9: Recall > 70% (relevant schemes are returned)
 
 **Priority:** High  
 **Dependencies:** Vector database, embedding model
@@ -248,7 +256,7 @@ Income Certificate (आय प्रमाण पत्र)
 
 ### NFR2: Security
 - TLS 1.3 for all connections
-- Session data expires via DynamoDB TTL (7-day default, configurable)
+- Session data expires via DynamoDB TTL (seven days after `updated_at`; configurable expiry is a future requirement)
 - Rate limiting: via API Gateway throttling
 - Input sanitization for prompt injection prevention
 
@@ -376,7 +384,7 @@ Income Certificate (आय प्रमाण पत्र)
 
 ### Privacy
 - No permanent storage of personal information
-- 24-hour TTL on all session data (balances privacy with multi-day user journeys through bureaucratic processes)
+- Seven-day TTL on persisted DynamoDB session data; deletion timing is controlled by DynamoDB rather than an exact application deadline
 - User consent for voice processing
 
 ### Accessibility

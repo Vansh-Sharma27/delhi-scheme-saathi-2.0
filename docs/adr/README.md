@@ -1,5 +1,7 @@
 # Architecture Decision Records
 
+These records preserve decisions and context as of their dates. Accepted records are not rewritten as implementation paths move; use [the current architecture](../ARCHITECTURE.md) for package ownership and current limitations. ADR-0003 remains proposed and unimplemented. Its original local-only context does not establish today's AWS deployment state.
+
 Why things are the way they are. Each record states the problem, the decision,
 what else was considered, and what it costs — so a decision does not have to be
 reconstructed from the code months later.

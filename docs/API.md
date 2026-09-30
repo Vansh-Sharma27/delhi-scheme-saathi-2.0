@@ -4,6 +4,8 @@ Base URL: `http://localhost:8000`
 
 Interactive documentation available at `/docs` (Swagger UI).
 
+JSON examples below are abbreviated illustrations of response shape, not captured catalog records or guarantees about current benefit amounts. Read the running API for complete fields and current data.
+
 ## Health Check
 
 ### GET /health
@@ -22,7 +24,7 @@ Returns service health status and database connectivity.
 | Field | Description |
 |-------|-------------|
 | status | `ok` or `degraded` |
-| database | `connected`, `disconnected`, or error message |
+| database | `connected`, `disconnected`, or `error` |
 | schemes_count | Number of active schemes in database |
 
 ---
@@ -37,7 +39,7 @@ List all schemes, optionally filtered by life event.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | life_event | string | Filter by life event (e.g., HOUSING, DEATH_IN_FAMILY) |
-| limit | int | Maximum results (default: 10) |
+| limit | int | Maximum results (default: 10, range: 1-100) |
 
 **Example**
 ```bash
@@ -193,8 +195,8 @@ Find nearest government offices by location or district.
 | lat | float | Latitude (required if no district) |
 | lng | float | Longitude (required if no district) |
 | district | string | District name (required if no lat/lng) |
-| office_type | string | Filter by type (optional) |
-| limit | int | Maximum results (default: 5) |
+| office_type | string | Filter by type for location queries; not applied on the district path |
+| limit | int | Maximum results (default: 5, range: 1-50) |
 
 **Example (by location)**
 ```bash
@@ -317,7 +319,7 @@ curl -X POST "http://localhost:8000/api/chat" \
 ```json
 {
   "response": "नमस्ते! मैं दिल्ली स्कीम साथी हूँ। आप मुझे बताएं, आज आपको किस तरह की सहायता चाहिए?",
-  "next_state": "UNDERSTANDING",
+  "next_state": "SITUATION_UNDERSTANDING",
   "schemes": [],
   "documents": [],
   "rejection_warnings": []
@@ -331,6 +333,8 @@ curl -X POST "http://localhost:8000/api/chat" \
 ### POST /webhook/telegram
 
 Webhook endpoint for Telegram Bot API.
+
+When `TELEGRAM_WEBHOOK_SECRET` is non-empty, `X-Telegram-Bot-Api-Secret-Token` must match or the endpoint returns `403`. An empty setting disables verification. Telegram `update_id` deduplication is not implemented.
 
 **Request Body**
 
@@ -376,4 +380,4 @@ No rate limiting is currently implemented. For production deployment, consider a
 
 ## Authentication
 
-No authentication is required for API endpoints. For production deployment, consider adding API key authentication for non-Telegram endpoints.
+Read-only endpoints have no application authentication. `POST /api/chat` checks `X-API-Key` when `CHAT_API_KEY` is configured, and the Telegram webhook checks its secret header when configured. Compose and SAM currently do not forward either setting; wire them into the selected deployment path explicitly.

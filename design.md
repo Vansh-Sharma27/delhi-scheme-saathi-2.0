@@ -1,5 +1,15 @@
 # Delhi Scheme Saathi - Design Document
 
+## Status and reading guide
+
+This is the retained pre-migration design proposal, including illustrative pseudocode and future requirements. It is not an implementation reference or evidence that its performance, availability, privacy, or accuracy targets have been achieved. Current implementation and package ownership are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), actual routes in [docs/API.md](docs/API.md), and setup in [docs/QUICKSTART.md](docs/QUICKSTART.md).
+
+The implemented system uses Telegram, five bundled schemes, 29 documents, 16 offices, and 46 rejection rules. Phase 4 introduces canonical domain values and eligibility evaluation with raw infrastructure retrieval. Application services and final composition wiring remain pending migration. Matching checks age, gender, caste category, and income/income segments; it does not enforce every field shown in the proposed eligibility model.
+
+The sketches below retain earlier alternatives and are not runnable application code. In particular, `/api/message`, phone authentication, Cognito rate limiting, ElastiCache, CloudFront, PgBouncer, read replicas, separate user-profile storage, Google speech fallback, automated data refresh, staleness warnings, and automatic deployment are not implemented. The current API uses `/api/chat`; sessions are keyed only by `user_id`, keep 12 messages, and serialize TTL as `updated_at` plus seven days. Voice selection is configuration-based, and audio is sent directly to Telegram rather than uploaded through the proposed S3 flow. The default global Bedrock inference profile and external providers do not establish India-only processing.
+
+Performance percentages, latency, availability, user outcomes, and proposed correctness properties below are targets, not measured results. CI runs the repository checks and evaluator-equivalence property test; it does not implement the proposed nightly, load-testing, or deployment pipeline. Historical pseudocode should not be copied in place of the current source.
+
 ## Design Decision Summary
 
 This section highlights key architectural decisions and their rationales, addressing requirements from the Requirements Document.
@@ -746,7 +756,7 @@ Integrates with Sarvam AI (primary) and Bhashini (fallback) for Hindi voice proc
 
 **Design Rationale:** Sarvam AI provides production-grade Hindi STT/TTS. Bhashini (AI4Bharat) provides India-hosted government-approved fallback. Multi-language probing selects the best transcript across language candidates.
 
-**Actual Implementation:**
+**Earlier implementation notes (see current architecture for corrections):**
 - STT: Sarvam Saaras v3 (primary), Bhashini ai4bharat/conformer (fallback)
 - TTS: Sarvam Bulbul v3 (primary), Bhashini ai4bharat/indic-tts (fallback)
 - Confidence threshold: 0.5 (below triggers text-mode fallback)
@@ -839,6 +849,8 @@ class VoiceProcessor:
             # Ultimate fallback: Text-only response
             return None  # Client will display text only
 
+
+```
 
 ### 5. CSC Handoff Summary Generation
 
