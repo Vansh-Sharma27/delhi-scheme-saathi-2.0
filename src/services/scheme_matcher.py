@@ -7,9 +7,9 @@ import asyncpg
 
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import Scheme, SchemeMatch
+from src.dss.infrastructure.database.catalog import get_canonical_life_events
 from src.dss.infrastructure.database.scheme_repo import get_schemes_by_life_event, hybrid_search
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, get_embedding_client
-from src.utils.scheme_catalog import get_canonical_life_events
 
 logger = logging.getLogger(__name__)
 

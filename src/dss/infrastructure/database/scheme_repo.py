@@ -11,12 +11,12 @@ from typing import Any
 
 import asyncpg
 
-from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.models.session import UserProfile
-from src.utils.scheme_catalog import (
+from src.dss.infrastructure.database.catalog import (
     get_canonical_life_events,
     get_canonical_scheme_ids_for_life_event,
 )
+from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
+from src.models.session import UserProfile
 
 logger = logging.getLogger(__name__)
 INCOME_SEGMENT_ORDER = ("EWS", "LIG", "MIG", "HIG")

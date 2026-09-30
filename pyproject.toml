@@ -194,13 +194,10 @@ ignore_imports = [
     "src.dss.domain.schemes.office -> src.models.office",
     "src.dss.infrastructure.** -> src.config",
     "src.dss.infrastructure.sessions.** -> src.models.session",
-    "src.dss.infrastructure.ai.grok_client -> src.utils.scheme_catalog",
-    "src.dss.infrastructure.ai.bedrock_client -> src.utils.scheme_catalog",
     "src.dss.infrastructure.database.** -> src.models.scheme",
     "src.dss.infrastructure.database.** -> src.models.session",
     "src.dss.infrastructure.database.** -> src.models.document",
     "src.dss.infrastructure.database.** -> src.models.office",
     "src.dss.infrastructure.database.** -> src.models.rejection_rule",
-    "src.dss.infrastructure.database.scheme_repo -> src.utils.scheme_catalog",
 ]
 unmatched_ignore_imports_alerting = "error"
