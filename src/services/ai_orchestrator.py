@@ -13,12 +13,12 @@ from typing import Any, TypeVar
 
 from src.config import get_settings
 from src.dss.application.ports.llm import ProviderExecutionResult
+from src.dss.domain.conversations.session import ConversationMemory, Session
+from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.infrastructure.ai.fallback_client import (
     FallbackLLMClient,
     get_llm_client,
 )
-from src.models.scheme import SchemeMatch
-from src.models.session import ConversationMemory, Session
 from src.services.conversation_memory import build_working_memory, working_memory_payload
 
 logger = logging.getLogger(__name__)

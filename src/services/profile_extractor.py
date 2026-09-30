@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from src.models.session import UserProfile
+from src.dss.domain.profiles.profile import UserProfile
 
 FIELD_QUESTION_ORDER = ("life_event", "age", "gender", "category", "annual_income")
 

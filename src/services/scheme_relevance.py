@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.models.scheme import SchemeMatch
+from src.dss.domain.schemes.scheme import SchemeMatch
 
 PRESENT_CONFIDENCE_THRESHOLD = 0.6
 CLARIFY_CONFIDENCE_THRESHOLD = 0.45

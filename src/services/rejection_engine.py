@@ -4,9 +4,9 @@ import logging
 
 import asyncpg
 
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.rejection_rule import RejectionRule
 from src.dss.infrastructure.database.rejection_rule_repo import get_rules_by_scheme
-from src.models.rejection_rule import RejectionRule
-from src.models.session import UserProfile
 
 logger = logging.getLogger(__name__)
 

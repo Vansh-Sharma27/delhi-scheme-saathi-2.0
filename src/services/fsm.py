@@ -1,6 +1,8 @@
 """Finite State Machine for conversation flow."""
 
-from src.models.session import ConversationState, Session, UserProfile
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
 
 
 class FSMTransitionError(Exception):

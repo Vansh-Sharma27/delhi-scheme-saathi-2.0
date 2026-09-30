@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import SessionStore
+from src.dss.domain.conversations.session import ConversationMemory, Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.infrastructure.sessions.session_store import get_session_store
-from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
 
 logger = logging.getLogger(__name__)
 

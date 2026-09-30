@@ -9,7 +9,9 @@ newly detected life event overwrite the topic mid-collection.
 import re
 from typing import Any
 
-from src.models.session import ConversationState, Session, UserProfile
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
 from src.services.conversation import intents, scheme_reference
 
 # Profile fields that feed the SQL eligibility filter or the semantic query.

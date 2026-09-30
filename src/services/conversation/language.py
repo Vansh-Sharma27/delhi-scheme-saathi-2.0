@@ -14,7 +14,7 @@ rather than letting a value-only reply flip the conversation into English.
 
 import re
 
-from src.models.session import Session
+from src.dss.domain.conversations.session import Session
 
 SUPPORTED_LANGUAGES = frozenset({"hi", "en", "hinglish"})
 
