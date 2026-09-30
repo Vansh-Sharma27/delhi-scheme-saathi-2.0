@@ -11,14 +11,4 @@ The port returns a timezone-aware datetime. An adapter wrapping
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Protocol, runtime_checkable
-
-
-@runtime_checkable
-class Clock(Protocol):
-    """Provider of the current UTC time."""
-
-    def now(self) -> datetime:
-        """Return the current time as a timezone-aware UTC datetime."""
-        ...
+from src.dss.domain.conversations.clock import Clock as Clock
