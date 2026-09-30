@@ -1,5 +1,7 @@
 # Architecture
 
+The [interactive diagrams](diagrams/index.html) provide high-level and detailed source-backed views of this implementation, including all four runtime consumers, voice, memory refresh, and the full conversation-state vocabulary. Open `docs/diagrams/index.html` in a local browser; [the FSM reference](diagrams/state-transitions.md) lists every allowed target.
+
 Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guidance through Telegram and a direct chat API. It supports Hindi, English, and Hinglish. It provides recommendations and application guidance; it does not submit applications or transfer a conversation to a human operator.
 
 ## Migration state

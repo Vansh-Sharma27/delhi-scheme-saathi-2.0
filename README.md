@@ -109,6 +109,8 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 
 ## Architecture
 
+Explore [the interactive diagrams](docs/diagrams/index.html): system and runtime architecture, matching workflow, chat and voice sequences, catalog and memory data flows, and session and conversation lifecycles. GitHub displays HTML source; open `docs/diagrams/index.html` in a browser from your local checkout. The [FSM reference](docs/diagrams/state-transitions.md) lists every allowed transition.
+
 The system uses a 10-state finite state machine (FSM) to manage conversation flow:
 
 ```

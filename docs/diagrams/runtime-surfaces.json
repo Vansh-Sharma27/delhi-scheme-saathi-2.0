@@ -1,0 +1,29 @@
+{
+  "schema_version": 1, "diagram_type": "architecture",
+  "meta": {"title": "Delhi Scheme Saathi · Runtime Surfaces", "output": "docs/diagrams/runtime-surfaces.html", "quality_profile": "showcase", "locale": "en", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "components": [
+    {"id": "container", "type": "backend", "label": "Container API", "sublabel": "Seed check · exec uvicorn", "pos": [40, 50], "size": [200, 78], "sources": [{"path": "scripts/container_start.py", "line": 11, "end_line": 20}, {"path": "Dockerfile", "line": 28, "end_line": 30}]},
+    {"id": "lambda", "type": "cloud", "label": "Lambda API", "sublabel": "Mangum lifespan = auto", "pos": [40, 230], "size": [200, 78], "sources": [{"path": "src/lambda_handler.py", "line": 6, "end_line": 11}, {"path": "sam-template.yaml", "line": 145, "end_line": 167}]},
+    {"id": "fastapi", "type": "backend", "label": "FastAPI lifespan", "sublabel": "Pool · store · queue wiring", "pos": [410, 140], "size": [220, 82], "sources": [{"path": "src/main.py", "line": 52, "end_line": 95}]},
+    {"id": "postgres", "type": "database", "label": "PostgreSQL pool", "sublabel": "asyncpg · min 2 / max 10", "pos": [410, 360], "size": [220, 78], "sources": [{"path": "src/main.py", "line": 34, "end_line": 49}]},
+    {"id": "sessions", "type": "database", "label": "Configured sessions", "sublabel": "In-memory / DynamoDB", "pos": [820, 140], "size": [220, 82], "sources": [{"path": "src/main.py", "line": 98, "end_line": 128}, {"path": "src/dss/infrastructure/sessions/session_store.py", "line": 20, "end_line": 111}]},
+    {"id": "queue", "type": "messagebus", "label": "Refresh queue", "sublabel": "In-process or SQS", "pos": [820, 360], "size": [220, 78], "sources": [{"path": "src/main.py", "line": 131, "end_line": 151}, {"path": "src/services/ai_background.py", "line": 62, "end_line": 87}]},
+    {"id": "worker", "type": "cloud", "label": "SQS worker Lambda", "sublabel": "Batch failures · DynamoDB", "pos": [820, 590], "size": [220, 78], "sources": [{"path": "src/memory_worker_handler.py", "line": 23, "end_line": 67}, {"path": "sam-template.yaml", "line": 236, "end_line": 278}]},
+    {"id": "scripts", "type": "backend", "label": "Operational scripts", "sublabel": "Inspect / fork shared session", "pos": [410, 590], "size": [230, 78], "sources": [{"path": "scripts/fork_session.py", "line": 39, "end_line": 73}, {"path": "scripts/fork_session.py", "line": 108, "end_line": 138}]}
+  ],
+  "connections": [
+    {"id": "container-start", "from": "container", "to": "fastapi", "label": "startup"},
+    {"id": "lambda-lifespan", "from": "lambda", "to": "fastapi", "label": "ASGI lifespan"},
+    {"id": "pool", "from": "fastapi", "to": "postgres", "label": "create / close"},
+    {"id": "store-config", "from": "fastapi", "to": "sessions", "label": "select store"},
+    {"id": "queue-config", "from": "fastapi", "to": "queue", "label": "configure", "variant": "dashed"},
+    {"id": "sqs-trigger", "from": "queue", "to": "worker", "label": "if SQS", "variant": "dashed"},
+    {"id": "worker-save", "from": "worker", "to": "sessions", "label": "DynamoDB I/O", "variant": "dashed", "fromSide": "right", "toSide": "right"},
+    {"id": "script-store", "from": "scripts", "to": "sessions", "label": "shared store", "fromSide": "left", "toSide": "bottom"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Existing lifecycle behavior", "items": ["FastAPI lifespan is shared by container and Mangum today; final lifecycle separation is still Phase 6 work.", "Pool initialization errors are caught; the API can start with a disconnected database.", "Shutdown stops the local worker, closes the queue and closes the pool."]},
+    {"dot": "amber", "title": "Worker ownership", "items": ["An in-memory queue starts a task in the API process; SQS expects the separately configured worker Lambda.", "The worker configures DynamoDB once per runtime and processes SQS records sequentially.", "SAM configures batch size 5 and ReportBatchItemFailures; DLQ redrive follows five receives."]},
+    {"dot": "rose", "title": "Configuration and script limits", "items": ["Session selection still depends on USE_BEDROCK or a non-default table name.", "fork_session imports current src.main wiring and refuses a process-local in-memory store.", "The SAM template supplies DatabaseUrl but does not create PostgreSQL/RDS.", "DynamoDB, SQS and PostgreSQL are separate resources, not an isolated single-runtime deployment."]}
+  ]
+}

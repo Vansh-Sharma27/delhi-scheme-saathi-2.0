@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {"title": "Delhi Scheme Saathi · System Architecture", "output": "docs/diagrams/architecture.html", "quality_profile": "showcase", "locale": "en", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "components": [
+    {"id": "resident", "type": "external", "label": "Resident", "sublabel": "Hindi · English · Hinglish", "pos": [40, 60], "size": [180, 74], "sources": [{"path": "src/webhook/handler.py", "line": 184, "end_line": 277}]},
+    {"id": "telegram", "type": "frontend", "label": "Telegram", "sublabel": "Text · voice · buttons", "pos": [330, 60], "size": [180, 74], "sources": [{"path": "src/webhook/handler.py", "line": 184, "end_line": 277}]},
+    {"id": "api", "type": "backend", "label": "FastAPI ingress", "sublabel": "Webhook + direct chat", "pos": [620, 60], "size": [190, 74], "sources": [{"path": "src/main.py", "line": 364, "end_line": 432}]},
+    {"id": "conversation", "type": "backend", "label": "Conversation", "sublabel": "Deterministic turn control", "pos": [620, 260], "size": [190, 80], "sources": [{"path": "src/services/conversation/service.py", "line": 139, "end_line": 219}]},
+    {"id": "sessions", "type": "database", "label": "Session store", "sublabel": "Memory or DynamoDB", "pos": [330, 260], "size": [180, 80], "sources": [{"path": "src/dss/infrastructure/sessions/session_store.py", "line": 20, "end_line": 94}, {"path": "src/main.py", "line": 98, "end_line": 128}]},
+    {"id": "ai", "type": "cloud", "label": "AI orchestration", "sublabel": "Bedrock / Grok + safe outputs", "pos": [910, 260], "size": [210, 80], "sources": [{"path": "src/services/ai_orchestrator.py", "line": 150, "end_line": 245}, {"path": "src/dss/infrastructure/ai/fallback_client.py", "line": 140, "end_line": 190}]},
+    {"id": "matching", "type": "backend", "label": "Scheme matching", "sublabel": "Retrieve · evaluate · rank", "pos": [620, 460], "size": [190, 80], "sources": [{"path": "src/services/scheme_matcher.py", "line": 52, "end_line": 126}]},
+    {"id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "Schemes + guidance · pgvector", "pos": [330, 460], "size": [220, 80], "sources": [{"path": "src/dss/infrastructure/database/scheme_repo.py", "line": 91, "end_line": 171}, {"path": "scripts/init-db/01-schema.sql", "line": 1, "end_line": 111}]},
+    {"id": "domain", "type": "backend", "label": "Eligibility evaluator", "sublabel": "Pure scheme + profile evaluation", "pos": [620, 660], "size": [220, 80], "sources": [{"path": "src/dss/domain/eligibility/evaluator.py", "line": 50, "end_line": 99}]},
+    {"id": "embedding", "type": "cloud", "label": "Embeddings", "sublabel": "Jina · Voyage · SQL fallback", "pos": [910, 460], "size": [220, 80], "sources": [{"path": "src/services/scheme_matcher.py", "line": 52, "end_line": 69}, {"path": "src/dss/infrastructure/embeddings/fallback_client.py", "line": 60, "end_line": 141}]}
+  ],
+  "connections": [
+    {"id": "resident-channel", "from": "resident", "to": "telegram", "label": "message", "variant": "emphasis"},
+    {"id": "webhook", "from": "telegram", "to": "api", "label": "HTTPS", "variant": "emphasis"},
+    {"id": "turn", "from": "api", "to": "conversation", "label": "validated turn", "variant": "emphasis"},
+    {"id": "state-io", "from": "conversation", "to": "sessions", "label": "load / save"},
+    {"id": "ai-proposal", "from": "conversation", "to": "ai", "label": "bounded AI"},
+    {"id": "match-if-ready", "from": "conversation", "to": "matching", "label": "when ready", "variant": "emphasis"},
+    {"id": "sql", "from": "matching", "to": "postgres", "label": "SQL"},
+    {"id": "policy", "from": "matching", "to": "domain", "label": "evaluate", "variant": "emphasis"},
+    {"id": "vectors", "from": "matching", "to": "embedding", "label": "if query text"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Current Phase 4", "items": ["Canonical domain values and infrastructure adapters are extracted.", "Conversation services and final composition wiring still await Phases 5 and 6.", "Legacy import surfaces remain compatibility paths."]},
+    {"dot": "rose", "title": "Ingress and state", "items": ["Direct chat stores api:-prefixed IDs, separate from Telegram.", "Chat API key and webhook secret checks apply only when configured.", "Session saves remain whole-item writes without conflict protection."]},
+    {"dot": "emerald", "title": "Scope and related views", "items": ["This is the foreground runtime overview; the runtime-surfaces view covers all four consumers and their lifecycles.", "Voice processing and memory refresh have separate sequence and data-flow views.", "Document guidance, warnings, application steps and CSC lookup are rendered through conversation views backed by PostgreSQL.", "Matching evaluates only the existing age, gender, caste, and income checks."]}
+  ]
+}

@@ -79,7 +79,7 @@ audio_temp/
 
 # Local benchmarking / review artifacts
 benchmark_results/
-diagrams/
+/diagrams/
 scripts/benchmark.py
 scripts/benchmark_text_live.py
 scripts/benchmark_voice.py

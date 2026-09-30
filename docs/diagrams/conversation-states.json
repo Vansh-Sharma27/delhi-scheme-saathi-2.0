@@ -1,0 +1,34 @@
+{
+  "schema_version": 2, "diagram_type": "lifecycle",
+  "meta": {"title": "Delhi Scheme Saathi · Conversation States", "output": "docs/diagrams/conversation-states.html", "quality_profile": "showcase", "locale": "en", "repository": {"url": "git@github.com:Vansh-Sharma27/delhi-scheme-saathi-2.0.git", "revision": "b1263c02523e27954170045c686d7b804e1a7149", "link_mode": "local-only"}},
+  "lanes": [{"id": "main", "label": "Discover and match"}, {"id": "views", "label": "Selected-scheme guidance"}, {"id": "handoff", "label": "Office guidance"}],
+  "states": [
+    {"id": "greeting", "type": "start", "label": "Greeting", "sublabel": "GREETING", "lane": "main", "col": 0, "sources": [{"path": "src/services/fsm.py", "line": 128, "end_line": 136}]},
+    {"id": "understand", "type": "active", "label": "Understand need", "sublabel": "SITUATION_UNDERSTANDING", "lane": "main", "col": 1, "width": 190, "sources": [{"path": "src/services/fsm.py", "line": 138, "end_line": 143}]},
+    {"id": "profile", "type": "active", "label": "Collect profile", "sublabel": "PROFILE_COLLECTION", "lane": "main", "col": 2, "sources": [{"path": "src/services/fsm.py", "line": 145, "end_line": 150}]},
+    {"id": "matching", "type": "decision", "label": "Match schemes", "sublabel": "SCHEME_MATCHING", "lane": "main", "col": 3, "sources": [{"path": "src/services/fsm.py", "line": 152, "end_line": 159}, {"path": "src/services/conversation/service.py", "line": 1333, "end_line": 1389}]},
+    {"id": "present", "type": "active", "label": "Present list", "sublabel": "SCHEME_PRESENTATION", "lane": "main", "col": 4, "sources": [{"path": "src/services/fsm.py", "line": 161, "end_line": 170}]},
+    {"id": "details", "type": "active", "label": "Scheme details", "sublabel": "SCHEME_DETAILS", "lane": "views", "col": 4, "sources": [{"path": "src/services/fsm.py", "line": 47, "end_line": 54}]},
+    {"id": "docs", "type": "active", "label": "Documents", "sublabel": "DOCUMENT_GUIDANCE", "lane": "views", "col": 3, "sources": [{"path": "src/services/fsm.py", "line": 55, "end_line": 62}]},
+    {"id": "warnings", "type": "active", "label": "Rejection risks", "sublabel": "REJECTION_WARNINGS", "lane": "views", "col": 2, "sources": [{"path": "src/services/fsm.py", "line": 63, "end_line": 70}]},
+    {"id": "apply", "type": "active", "label": "Application help", "sublabel": "APPLICATION_HELP", "lane": "views", "col": 1, "sources": [{"path": "src/services/fsm.py", "line": 71, "end_line": 79}]},
+    {"id": "csc", "type": "waiting", "label": "CSC guidance", "sublabel": "CSC_HANDOFF", "lane": "handoff", "col": 1, "sources": [{"path": "src/services/fsm.py", "line": 80, "end_line": 89}, {"path": "src/services/fsm.py", "line": 206, "end_line": 213}]}
+  ],
+  "transitions": [
+    {"id": "need", "from": "greeting", "to": "understand", "label": "unknown"},
+    {"id": "topic", "from": "understand", "to": "profile", "label": "topic"},
+    {"id": "ready", "from": "profile", "to": "matching", "label": "complete"},
+    {"id": "results", "from": "matching", "to": "present", "label": "present"},
+    {"id": "selection", "from": "present", "to": "details", "label": "select"},
+    {"id": "documents", "from": "details", "to": "docs", "label": "documents"},
+    {"id": "risks", "from": "docs", "to": "warnings", "label": "warnings"},
+    {"id": "steps", "from": "warnings", "to": "apply", "label": "apply"},
+    {"id": "office", "from": "apply", "to": "csc", "label": "office"},
+    {"id": "resume-help", "from": "csc", "to": "apply", "label": "resume", "variant": "dashed"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "All ten states, representative journey", "items": ["The arrows show one supported journey, not the full transition graph. The companion state-transition table lists every allowed target, including self-transitions.", "Known topic or a complete profile can skip intermediate collection states.", "The four selected-scheme views support cross-navigation and return to the list; they are not a forced linear wizard."]},
+    {"dot": "amber", "title": "Matching outcomes", "items": ["No deterministic match returns to collection with awaiting_profile_change=true.", "Relevance clarification returns to situation understanding and asks for life_event.", "Low-context clarification can be suppressed to keep deterministic results."]},
+    {"dot": "rose", "title": "Reset and handoff semantics", "items": ["/start and reset/goodbye handling can rebuild context outside the ordinary FSM transition table.", "CSC_HANDOFF renders office guidance; it does not transfer a live conversation to an operator and is not terminal.", "Six legacy aliases remain plain Enum value aliases; persisted legacy strings are repaired in infrastructure."]}
+  ]
+}
