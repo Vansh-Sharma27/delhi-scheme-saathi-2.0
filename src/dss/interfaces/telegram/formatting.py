@@ -55,24 +55,16 @@ def _split_message(text: str) -> list[str]:
 
 def _clean_for_tts(text: str) -> str:
     """Clean text for TTS by removing emojis and markdown."""
-    # Remove emojis
-    emoji_pattern = re.compile(
-        "["
-        "\U0001f600-\U0001f64f"  # emoticons
-        "\U0001f300-\U0001f5ff"  # symbols & pictographs
-        "\U0001f680-\U0001f6ff"  # transport & map
-        "\U0001f700-\U0001f77f"  # alchemical
-        "\U0001f780-\U0001f7ff"  # geometric
-        "\U0001f800-\U0001f8ff"  # arrows
-        "\U0001f900-\U0001f9ff"  # supplemental
-        "\U0001fa00-\U0001fa6f"  # chess
-        "\U0001fa70-\U0001faff"  # symbols
-        "\U00002702-\U000027b0"  # dingbats
-        "\U000024c2-\U0001f251"
-        "]+",
-        flags=re.UNICODE,
+    # The legacy character set merges into three disjoint intervals.
+    text = "".join(
+        char
+        for char in text
+        if not (
+            0x24C2 <= ord(char) <= 0x1F251
+            or 0x1F300 <= ord(char) <= 0x1F64F
+            or 0x1F680 <= ord(char) <= 0x1FAFF
+        )
     )
-    text = emoji_pattern.sub("", text)
 
     # Remove markdown formatting
     text = re.sub(r"\*+", "", text)  # bold
