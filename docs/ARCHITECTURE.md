@@ -8,7 +8,7 @@ Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guid
 
 ## Migration state
 
-Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Canonical domain values and infrastructure adapters live under `src/dss`; conversation orchestration, rendering, HTTP routes, and composition wiring still live in their existing packages pending Phases 5 and 6.
+Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Phase 5 application and interface extraction is implemented and its local verification gate is green. Conversation analysis, language selection and enforcement, profile updates, transition/reset decisions, turn/snapshot rendering, commands, persistence, compact memory, AI task policy, and matching orchestration have application implementations. Guidance is split into localization, templates, presenters, currency formatting, and generation. HTTP routes and Telegram handling live in `src/dss/interfaces`. The application service successor is below 300 physical lines and every new source file is at most 500 lines. Review, tagging, and merge remain pending; the phase is not formally closed until those steps are completed. Composition-root construction and facade removal belong to Phase 6.
 
 | Area | Current implementation |
 | --- | --- |
@@ -22,9 +22,14 @@ Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma2
 | Queue adapters and payload codec | `src/dss/infrastructure/queues/` |
 | AI providers and unchanged prompt templates | `src/dss/infrastructure/ai/` |
 | Embeddings and speech adapters | `src/dss/infrastructure/embeddings/`, `src/dss/infrastructure/speech/` |
-| Conversation pipeline and rendering | `src/services/conversation/`, `src/services/response_generator.py` |
-| Matching orchestration | `src/services/scheme_matcher.py` |
-| FastAPI routes and Telegram handling | `src/main.py`, `src/webhook/handler.py` |
+| Conversation application use cases and result models | `src/dss/application/conversation/` |
+| Localization, response templates, presenters, generation, currency formatting | `src/dss/application/guidance/` |
+| Presentation facts derived from the existing evaluator | `src/dss/domain/eligibility/presentation_facts.py` |
+| AI usage telemetry | `src/dss/observability/llm_usage.py` |
+| Conversation compatibility entrypoint and view/provider helpers | `src/services/conversation/`, `src/services/response_generator.py` |
+| Matching application orchestration | `src/dss/application/matching/matching_use_case.py` |
+| FastAPI routes and Telegram handling | `src/dss/interfaces/api/routes.py`, `src/dss/interfaces/telegram/` |
+| Startup and interface compatibility wiring | `src/main.py`, `src/webhook/handler.py` |
 | Settings and credential redaction | `src/config.py`, `src/utils/logging_config.py` |
 
 Import-linter enforces three contracts: the six-module conversation order, the modular-monolith layer direction, and the restriction on new `src.dss` imports of legacy wiring. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
@@ -48,7 +53,9 @@ The SAM template defines API Gateway, the API and worker Lambdas, DynamoDB sessi
 
 ## Conversation handling
 
-The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. The conversation package dependency order is `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
+The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. `ConversationApplication` runs the turn pipeline through `TurnAnalyzer`, `LanguagePolicy`, `ProfileUpdateService`, `TransitionPolicy`, `TurnRenderer`, `CommandHandler`, and `TurnPersistence`. `ConversationService` supplies legacy collaborators through constructor-time wiring and keeps the external entrypoint stable. `LanguagePolicy.enforce` delegates to the shared localization path before persistence. `TransitionPolicy` owns resets and stale-selection invalidation. `TurnRenderer.snapshot` re-renders language-switch context explicitly. The profile-question renderer owns skipped-field and validation rendering and the single template-versus-LLM decision. Shared scheme views remain one injected collaborator. The legacy helper dependency order remains `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
+
+Guidance presenters format supplied eligibility facts; they never invoke the evaluator or infer an income band. Guidance orchestration obtains those facts from the domain and preserves the existing deterministic-answer order before LLM generation. API, response-generation, AI-orchestration, and Telegram compatibility surfaces preserve live monkeypatch hooks and shared singleton identity until Phase 6.
 
 The ten states are `GREETING`, `SITUATION_UNDERSTANDING`, `PROFILE_COLLECTION`, `SCHEME_MATCHING`, `SCHEME_PRESENTATION`, `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS`, `APPLICATION_HELP`, and `CSC_HANDOFF`. The four scheme views can move between one another and back to the list. `src/services/fsm.py` owns the transition table.
 

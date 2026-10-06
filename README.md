@@ -39,13 +39,13 @@ delhi-scheme-saathi-2.0/
 ├── src/
 │   ├── dss/
 │   │   ├── domain/         # Profiles, schemes, conversations, eligibility
-│   │   ├── application/    # Ports; use-case packages await Phase 5
+│   │   ├── application/    # Conversation, matching, guidance, AI policy; shared ports
 │   │   ├── infrastructure/ # Database, sessions, queues, AI, embeddings, speech
-│   │   ├── interfaces/     # API/Telegram packages await Phase 5
+│   │   ├── interfaces/     # HTTP routes and Telegram text/voice handling
 │   │   └── bootstrap/      # Composition root awaits Phase 6
-│   ├── models/             # API models and legacy domain compatibility paths
+│   ├── models/             # Application DTO and domain compatibility paths
 │   ├── db/                 # Pool lifecycle and repository compatibility paths
-│   ├── services/           # Current conversation, matching, and rendering services
+│   ├── services/           # Compatibility services and provider-facing helpers
 │   ├── integrations/       # Provider compatibility paths and Telegram client
 │   ├── prompts/            # Legacy loader; templates live under infrastructure/ai
 │   ├── utils/              # Validators, keyboards, logging, catalog facade
