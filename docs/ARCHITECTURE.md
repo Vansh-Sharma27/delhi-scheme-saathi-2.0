@@ -32,11 +32,13 @@ Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma2
 | Startup and interface compatibility wiring | `src/main.py`, `src/webhook/handler.py` |
 | Settings and credential redaction | `src/config.py`, `src/utils/logging_config.py` |
 
-Import-linter enforces three contracts: the six-module conversation order, the modular-monolith layer direction, and the restriction on new `src.dss` imports of legacy wiring. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
+Import-linter enforces four contracts: the six-module conversation order, the modular-monolith layer direction, the restriction on new `src.dss` imports of legacy wiring, and a prohibition on application/interface imports of infrastructure. The fourth contract checks direct and indirect imports. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
 
 Domain code imports no application, infrastructure, or legacy project modules. Infrastructure supplies catalog values to the pure required-fields policy. The application clock import re-exports the domain `Clock` Protocol with the same type identity.
 
 Legacy `src/db`, provider, model, prompt-loader, and catalog paths remain compatibility surfaces until Phase 6. Legacy `Session`, `UserProfile`, and `Scheme` subclasses retain standalone hydration and no-argument catalog helpers. Production services and ports use canonical domain types.
+
+Telegram handling consumes `SpeechProvider.is_available()` and STT/TTS methods without inspecting provider credentials. The legacy webhook facade preserves Sarvam-first selection and injects the selected provider; final provider construction moves into the composition root in Phase 6. HTTP catalog, document, rule, office, health, and taxonomy reads use repository ports. Database access and the existing SQL remain in the adapters. Application services receive prompt, safe-output, and catalog callbacks from legacy wiring rather than importing adapters.
 
 ## Four consumer surfaces
 
@@ -100,7 +102,7 @@ Optional AI relevance judging follows deterministic matching. Presentation and c
 
 - LLM: Bedrock is preferred when `USE_BEDROCK=true`; Grok is used when configured as the fallback or primary local provider. The default Bedrock identifier is `global.amazon.nova-2-lite-v1:0`; this does not establish India-only processing.
 - Embeddings: Jina `jina-embeddings-v3` is primary, Voyage `voyage-multilingual-2` is fallback, then vector ranking is skipped.
-- Speech: the webhook selects Sarvam when its key exists, otherwise Bhashini when configured. It does not retry Bhashini automatically after a selected Sarvam client fails. Unavailable or low-confidence speech requests fall back to text; the confidence threshold is 0.5.
+- Speech: legacy wiring selects Sarvam when its key exists, otherwise Bhashini when configured. Telegram handling receives the selected speech port and its availability capability. It does not retry Bhashini automatically after a selected Sarvam client fails. Unavailable or low-confidence speech requests fall back to text; the confidence threshold is 0.5.
 - Telegram: text and inline keyboards are sent through the existing client. TTS audio is sent directly as bytes; the current response path does not upload audio to S3. Text above 900 characters skips TTS.
 
 `AIOrchestrator` applies timeouts of 8 seconds for analysis, 3 seconds for relevance judging, 8 seconds for response generation, and 20 seconds for background memory refresh. It records task telemetry and returns task-specific safe outputs on failure. A missing API database pool produces `503`; `/health` reports database state in its JSON response, including disconnected or error states.
