@@ -82,6 +82,8 @@ from src.dss.domain.eligibility.presentation_facts import (
 from src.dss.domain.eligibility.presentation_facts import eligibility_facts
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import Scheme
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
+from src.dss.infrastructure.ai.prompts.loader import get_generate_response_prompt
 from src.services.ai_orchestrator import get_ai_orchestrator
 
 logger = logging.getLogger(__name__)
@@ -103,7 +105,11 @@ async def _rewrite_response_language(
     language: str,
 ) -> str:
     return await localization._rewrite_response_language(
-        session, text, language, get_ai_orchestrator=get_ai_orchestrator
+        session,
+        text,
+        language,
+        get_ai_orchestrator=get_ai_orchestrator,
+        safe_generation_text=FallbackLLMClient._safe_generation_text,
     )
 
 
@@ -122,7 +128,10 @@ async def generate_response(
     context: dict[str, Any],
 ) -> str:
     return await generation.generate_response(
-        session, context, get_ai_orchestrator=get_ai_orchestrator
+        session,
+        context,
+        get_ai_orchestrator=get_ai_orchestrator,
+        get_prompt=get_generate_response_prompt,
     )
 
 

@@ -58,6 +58,12 @@ class PostgresSchemeRepository(SchemeRepository):
     async def get_all_schemes(self, active_only: bool = True) -> list[Scheme]:
         return await scheme_repo.get_all_schemes(self._pool, active_only)
 
+    async def count_active_schemes(self) -> int:
+        return await scheme_repo.count_active_schemes(self._pool)
+
+    async def list_life_events(self) -> list[dict[str, Any]]:
+        return await scheme_repo.list_life_events(self._pool)
+
     async def hybrid_search(
         self,
         life_event: str | None,

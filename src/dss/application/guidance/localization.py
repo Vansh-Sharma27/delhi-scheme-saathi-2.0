@@ -1,10 +1,10 @@
 """Response language selection and script detection."""
 
 import re
+from collections.abc import Callable
 from typing import Any, cast
 
 from src.dss.domain.conversations.session import Session
-from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 
 
 def _pick_language_text(
@@ -137,6 +137,7 @@ async def _rewrite_response_language(
     language: str,
     *,
     get_ai_orchestrator: Any,
+    safe_generation_text: Callable[[str], str],
 ) -> str:
     """Rewrite a response using the shared Bedrock/Grok translation path."""
     if not text.strip():
@@ -155,7 +156,7 @@ async def _rewrite_response_language(
     if not translated.strip():
         return text
 
-    safe_fallback = FallbackLLMClient._safe_generation_text(language)
+    safe_fallback = safe_generation_text(language)
     if translated.strip() == safe_fallback.strip():
         return text
 

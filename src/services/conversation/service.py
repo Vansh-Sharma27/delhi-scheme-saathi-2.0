@@ -22,6 +22,7 @@ from src.dss.application.ports.clock import Clock
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import SchemeMatch
+from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
 from src.models.api import ChatRequest, ChatResponse
 from src.services import (
     fsm,
@@ -72,7 +73,9 @@ class ConversationService:
             session_manager=session_manager,
             turn_policy=turn_policy,
         )
-        self.turn_analyzer = TurnAnalyzer(self.ai, policies=self.policies)
+        self.turn_analyzer = TurnAnalyzer(
+            self.ai, policies=self.policies, get_system_prompt=get_analysis_system_prompt
+        )
         self.language_policy = LanguagePolicy()
         self.profile_update_service = ProfileUpdateService()
         self.transition_policy = TransitionPolicy()

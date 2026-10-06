@@ -1,5 +1,6 @@
 """Grounded response orchestration with injected generation callbacks."""
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from src.dss.application.guidance.eligibility_rules import _build_eligibility_rule_text
@@ -16,7 +17,6 @@ from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
 from src.dss.domain.eligibility.presentation_facts import _infer_income_segment, eligibility_facts
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import Scheme
-from src.dss.infrastructure.ai.prompts.loader import get_generate_response_prompt
 
 
 async def generate_response(
@@ -24,6 +24,7 @@ async def generate_response(
     context: dict[str, Any],
     *,
     get_ai_orchestrator: Any,
+    get_prompt: Callable[[], str],
 ) -> str:
     """Generate natural language response using LLM and database context.
 
@@ -36,7 +37,7 @@ async def generate_response(
     """
     # Load response generation prompt
     try:
-        system_prompt = get_generate_response_prompt()
+        system_prompt = get_prompt()
     except FileNotFoundError:
         system_prompt = "Generate a helpful response based on the context."
 

@@ -173,3 +173,15 @@ ignore_imports = [
     "src.dss.infrastructure.** -> src.config",
 ]
 unmatched_ignore_imports_alerting = "error"
+
+[[tool.importlinter.contracts]]
+name = "Phase 5 application and interfaces depend on ports, not infrastructure"
+type = "forbidden"
+source_modules = [
+    "src.dss.application.conversation",
+    "src.dss.application.matching",
+    "src.dss.application.guidance",
+    "src.dss.interfaces",
+]
+forbidden_modules = ["src.dss.infrastructure"]
+allow_indirect_imports = false

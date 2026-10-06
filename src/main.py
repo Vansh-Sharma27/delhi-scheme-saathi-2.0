@@ -7,14 +7,22 @@ and apply for government welfare schemes.
 import logging
 import sys
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 
 import asyncpg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
-from src.db import document_repo, office_repo, rejection_rule_repo, scheme_repo
+from src.dss.application.ports.document_repository import DocumentRepository
+from src.dss.application.ports.office_repository import OfficeRepository
+from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
+from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.infrastructure.database.adapters import (
+    PostgresDocumentRepository,
+    PostgresOfficeRepository,
+    PostgresRejectionRuleRepository,
+    PostgresSchemeRepository,
+)
 from src.dss.interfaces.api.routes import APIRoutes
 from src.services import conversation as conversation
 from src.utils.logging_config import configure_logging
@@ -212,12 +220,24 @@ def get_db_pool() -> asyncpg.Pool:
 
 
 telegram_handler = handler
-repositories = SimpleNamespace(
-    document_repo=document_repo,
-    rejection_rule_repo=rejection_rule_repo,
-    scheme_repo=scheme_repo,
-    office_repo=office_repo,
-)
+
+
+def scheme_repository(pool: asyncpg.Pool) -> SchemeRepository:
+    return PostgresSchemeRepository(pool)
+
+
+def document_repository(pool: asyncpg.Pool) -> DocumentRepository:
+    return PostgresDocumentRepository(pool)
+
+
+def office_repository(pool: asyncpg.Pool) -> OfficeRepository:
+    return PostgresOfficeRepository(pool)
+
+
+def rejection_rule_repository(pool: asyncpg.Pool) -> RejectionRuleRepository:
+    return PostgresRejectionRuleRepository(pool)
+
+
 _routes = APIRoutes(sys.modules[__name__])
 health_check = _routes.health_check
 app.add_api_route("/health", health_check, methods=["GET"])

@@ -1,10 +1,17 @@
 """Profile extraction service."""
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from src.dss.domain.profiles.profile import UserProfile
-from src.dss.infrastructure.database.catalog import _load_catalog
+
+
+def _unconfigured_catalog() -> dict[str, Any]:
+    raise RuntimeError("Profile catalog provider has not been configured")
+
+
+_load_catalog: Callable[[], dict[str, Any]] = _unconfigured_catalog
 
 FIELD_QUESTION_ORDER = ("life_event", "age", "gender", "category", "annual_income")
 

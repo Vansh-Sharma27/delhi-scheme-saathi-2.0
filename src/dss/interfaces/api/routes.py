@@ -7,6 +7,10 @@ from typing import Any, cast
 from fastapi import HTTPException, Query, Request
 
 from src.dss.application.conversation.contracts import ChatRequest
+from src.dss.application.ports.document_repository import DocumentRepository
+from src.dss.application.ports.office_repository import OfficeRepository
+from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
+from src.dss.application.ports.scheme_repository import SchemeRepository
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +29,10 @@ class APIRoutes:
 
         if self.runtime.db_pool:
             try:
-                async with self.runtime.db_pool.acquire() as conn:
-                    # Check database connectivity and get scheme count
-                    count = await conn.fetchval(
-                        "SELECT COUNT(*) FROM schemes WHERE is_active = true"
-                    )
-                    result["database"] = "connected"
-                    result["schemes_count"] = count or 0
+                repository: SchemeRepository = self.runtime.scheme_repository(self.runtime.db_pool)
+                count = await repository.count_active_schemes()
+                result["database"] = "connected"
+                result["schemes_count"] = count
             except Exception as e:
                 logger.error("Database health check failed: %s", e)
                 result["database"] = "error"
@@ -49,19 +50,19 @@ class APIRoutes:
 
     async def get_scheme(self, scheme_id: str) -> dict[str, Any]:
         """Get full scheme details by ID."""
-        document_repo = self.runtime.repositories.document_repo
-        rejection_rule_repo = self.runtime.repositories.rejection_rule_repo
-        scheme_repo = self.runtime.repositories.scheme_repo
 
         pool = self.runtime.get_db_pool()
-        scheme = await scheme_repo.get_scheme_by_id(pool, scheme_id)
+        scheme_repo: SchemeRepository = self.runtime.scheme_repository(pool)
+        document_repo: DocumentRepository = self.runtime.document_repository(pool)
+        rejection_rule_repo: RejectionRuleRepository = self.runtime.rejection_rule_repository(pool)
+        scheme = await scheme_repo.get_scheme_by_id(scheme_id)
 
         if not scheme:
             raise HTTPException(status_code=404, detail=f"Scheme {scheme_id} not found")
 
         # Get related documents and rejection rules
-        documents = await document_repo.get_documents_for_scheme(pool, scheme_id)
-        rejection_rules = await rejection_rule_repo.get_rules_by_scheme(pool, scheme_id)
+        documents = await document_repo.get_documents_for_scheme(scheme_id)
+        rejection_rules = await rejection_rule_repo.get_rules_by_scheme(scheme_id)
 
         return {
             "scheme": scheme.model_dump(),
@@ -75,14 +76,14 @@ class APIRoutes:
         limit: int = Query(default=10, ge=1, le=100),
     ) -> dict[str, Any]:
         """List schemes, optionally filtered by life event."""
-        scheme_repo = self.runtime.repositories.scheme_repo
 
         pool = self.runtime.get_db_pool()
+        scheme_repo: SchemeRepository = self.runtime.scheme_repository(pool)
 
         if life_event:
-            schemes = await scheme_repo.get_schemes_by_life_event(pool, life_event, limit)
+            schemes = await scheme_repo.get_schemes_by_life_event(life_event, limit)
         else:
-            schemes = await scheme_repo.get_all_schemes(pool)
+            schemes = await scheme_repo.get_all_schemes()
             schemes = schemes[:limit]
 
         return {
@@ -93,11 +94,11 @@ class APIRoutes:
 
     async def get_document(self, document_id: str) -> dict[str, Any]:
         """Get document details with procurement guidance."""
-        document_repo = self.runtime.repositories.document_repo
-        office_repo = self.runtime.repositories.office_repo
 
         pool = self.runtime.get_db_pool()
-        document = await document_repo.get_document_by_id(pool, document_id)
+        document_repo: DocumentRepository = self.runtime.document_repository(pool)
+        office_repo: OfficeRepository = self.runtime.office_repository(pool)
+        document = await document_repo.get_document_by_id(document_id)
 
         if not document:
             raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
@@ -105,10 +106,10 @@ class APIRoutes:
         # Get prerequisite documents
         prereq_docs = []
         if document.prerequisites:
-            prereq_docs = await document_repo.get_documents_by_ids(pool, document.prerequisites)
+            prereq_docs = await document_repo.get_documents_by_ids(document.prerequisites)
 
         # Get offices that issue this document
-        offices = await office_repo.get_offices_by_service(pool, document_id)
+        offices = await office_repo.get_offices_by_service(document_id)
 
         return {
             "document": document.model_dump(),
@@ -125,15 +126,15 @@ class APIRoutes:
         limit: int = Query(default=5, ge=1, le=50),
     ) -> dict[str, Any]:
         """Get nearest CSC/government offices."""
-        office_repo = self.runtime.repositories.office_repo
 
         pool = self.runtime.get_db_pool()
+        office_repo: OfficeRepository = self.runtime.office_repository(pool)
 
         if lat is not None and lng is not None:
-            offices = await office_repo.get_nearest_offices(pool, lat, lng, limit, office_type)
+            offices = await office_repo.get_nearest_offices(lat, lng, limit, office_type)
             query_type = "location"
         elif district:
-            offices = await office_repo.get_offices_by_district(pool, district, limit)
+            offices = await office_repo.get_offices_by_district(district, limit)
             query_type = "district"
         else:
             raise HTTPException(
@@ -152,22 +153,8 @@ class APIRoutes:
         """List all life event categories."""
         pool = self.runtime.get_db_pool()
 
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT key, display_name, display_name_hindi, aliases FROM life_events_taxonomy ORDER BY key"
-            )
-
-        return {
-            "life_events": [
-                {
-                    "key": row["key"],
-                    "display_name": row["display_name"],
-                    "display_name_hindi": row["display_name_hindi"],
-                    "aliases": list(row["aliases"] or []),
-                }
-                for row in rows
-            ]
-        }
+        repository: SchemeRepository = self.runtime.scheme_repository(pool)
+        return {"life_events": await repository.list_life_events()}
 
     async def telegram_webhook(self, request: Request) -> dict[str, str]:
         """Handle incoming Telegram updates with secret token verification."""

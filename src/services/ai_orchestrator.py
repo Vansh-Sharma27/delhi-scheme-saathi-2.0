@@ -14,6 +14,11 @@ from src.dss.application.conversation.ai_orchestrator import (
 from src.dss.application.conversation.ai_orchestrator import (
     get_ai_orchestrator as get_ai_orchestrator,
 )
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient, get_llm_client
 
 _implementation.get_settings = get_settings
+_implementation.get_llm_client = get_llm_client
+_implementation.safe_analysis_payload = FallbackLLMClient._safe_analysis_payload
+_implementation.safe_relevance_payload = FallbackLLMClient._safe_relevance_payload
+_implementation.safe_generation_text = FallbackLLMClient._safe_generation_text
 sys.modules[__name__] = _implementation

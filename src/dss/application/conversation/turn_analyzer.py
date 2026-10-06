@@ -1,18 +1,19 @@
 """Application use case for analyzing one conversation turn."""
 
+from collections.abc import Callable
 from typing import Any, cast
 
 from src.dss.application.conversation.models import TurnAnalysis
 from src.dss.domain.conversations.session import Session
-from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
 
 
 class TurnAnalyzer:
     """Run LLM analysis and apply deterministic conversation guardrails."""
 
-    def __init__(self, ai: Any, *, policies: Any) -> None:
+    def __init__(self, ai: Any, *, policies: Any, get_system_prompt: Callable[[], str]) -> None:
         self.ai = ai
         self.policies = policies
+        self.get_system_prompt = get_system_prompt
 
     async def analyze(self, session: Session, user_message: str) -> TurnAnalysis:
         language = self.policies.language
@@ -35,7 +36,7 @@ class TurnAnalyzer:
             conversation_history=self.policies.session_manager.get_conversation_history(
                 session, include_assistant=bool(session.currently_asking)
             ),
-            system_prompt=get_analysis_system_prompt(),
+            system_prompt=self.get_system_prompt(),
             session_language=llm_session_language,
         )
         extracted_fields = self._merge_extracted_fields(

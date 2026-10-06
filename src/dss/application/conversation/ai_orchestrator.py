@@ -12,22 +12,22 @@ from time import perf_counter
 from typing import Any, TypeVar, cast
 
 from src.dss.application.conversation.memory import build_working_memory, working_memory_payload
-from src.dss.application.ports.llm import ProviderExecutionResult
+from src.dss.application.ports.llm import LLMProvider, ProviderExecutionResult, TaskPriority
 from src.dss.domain.conversations.session import ConversationMemory, Session
 from src.dss.domain.schemes.scheme import SchemeMatch
-from src.dss.infrastructure.ai.fallback_client import (
-    FallbackLLMClient,
-    get_llm_client,
-)
 from src.dss.observability.llm_usage import LLMUsageEvent as LLMUsageEvent
 from src.dss.observability.llm_usage import log_llm_usage
 
 
-def _unconfigured_settings() -> Any:
+def _unconfigured_settings(*args: Any, **kwargs: Any) -> Any:
     raise RuntimeError("Application settings provider has not been configured")
 
 
 get_settings: Callable[[], Any] = _unconfigured_settings
+get_llm_client: Callable[[], LLMProvider] = _unconfigured_settings
+safe_analysis_payload: Callable[[str], dict[str, Any]] = _unconfigured_settings
+safe_relevance_payload: Callable[[list[dict[str, Any]]], dict[str, Any]] = _unconfigured_settings
+safe_generation_text: Callable[[str], str] = _unconfigured_settings
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -67,7 +67,7 @@ class AIOrchestrator:
 
     def __init__(
         self,
-        llm_client: FallbackLLMClient | None = None,
+        llm_client: LLMProvider | None = None,
         *,
         policies: Mapping[AITaskType, AIExecutionPolicy] | None = None,
         usage_sink: Callable[[LLMUsageEvent], None] | None = None,
@@ -223,7 +223,7 @@ class AIOrchestrator:
                         system_prompt=system_prompt,
                         session_language=session_language,
                         working_memory=memory,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                     if self._get_instance_override("analyze_message") is not None
                     else self.llm_client.analyze_message_with_meta(
@@ -234,11 +234,11 @@ class AIOrchestrator:
                         system_prompt=system_prompt,
                         session_language=session_language,
                         working_memory=memory,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                 )
             ),
-            safe_output=lambda: FallbackLLMClient._safe_analysis_payload(session_language),
+            safe_output=lambda: safe_analysis_payload(session_language),
         )
 
     async def judge_scheme_relevance(
@@ -275,7 +275,7 @@ class AIOrchestrator:
                         candidate_schemes=candidate_schemes,
                         session_language=session_language,
                         working_memory=memory,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                     if self._get_instance_override("judge_scheme_relevance") is not None
                     else self.llm_client.judge_scheme_relevance_with_meta(
@@ -286,11 +286,11 @@ class AIOrchestrator:
                         candidate_schemes=candidate_schemes,
                         session_language=session_language,
                         working_memory=memory,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                 )
             ),
-            safe_output=lambda: FallbackLLMClient._safe_relevance_payload(candidate_schemes),
+            safe_output=lambda: safe_relevance_payload(candidate_schemes),
         )
 
     async def generate_response(
@@ -324,18 +324,18 @@ class AIOrchestrator:
                         context=enriched_context,
                         system_prompt=system_prompt,
                         user_language=user_language,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                     if self._get_instance_override("generate_response") is not None
                     else self.llm_client.generate_response_with_meta(
                         context=enriched_context,
                         system_prompt=system_prompt,
                         user_language=user_language,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                 )
             ),
-            safe_output=lambda: FallbackLLMClient._safe_generation_text(user_language),
+            safe_output=lambda: safe_generation_text(user_language),
         )
 
     async def refresh_working_memory(
@@ -364,13 +364,13 @@ class AIOrchestrator:
                         "summarize_conversation",
                         messages=messages,
                         current_summary=session.working_memory.summary,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                     if self._get_instance_override("summarize_conversation") is not None
                     else self.llm_client.summarize_conversation_with_meta(
                         messages=messages,
                         current_summary=session.working_memory.summary,
-                        priority=priority,
+                        priority=cast(TaskPriority, priority),
                     )
                 )
             ),

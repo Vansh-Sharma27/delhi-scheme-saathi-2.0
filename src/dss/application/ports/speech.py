@@ -49,6 +49,10 @@ class TTSResult:
 class SpeechProvider(Protocol):
     """Provider contract for speech transcription and synthesis."""
 
+    def is_available(self) -> bool:
+        """Report configuration availability without exposing credentials."""
+        ...
+
     async def speech_to_text(
         self,
         audio_bytes: bytes,

@@ -17,7 +17,7 @@ import asyncpg
 
 from src.dss.application.conversation.contracts import ChatRequest, TelegramUpdate
 from src.dss.application.ports.notifier import Notifier
-from src.dss.infrastructure.speech.sarvam import get_sarvam_client
+from src.dss.application.ports.speech import SpeechProvider
 from src.dss.interfaces.telegram.formatting import _clean_for_telegram as _clean_for_telegram
 from src.dss.interfaces.telegram.formatting import _clean_for_tts as _clean_for_tts
 from src.dss.interfaces.telegram.formatting import _split_message as _split_message
@@ -32,30 +32,15 @@ get_telegram_client: Callable[[], Notifier] = _unconfigured
 ConversationService: Callable[[asyncpg.Pool], Any] = _unconfigured
 session_manager: Any = None
 language: Any = None
-get_bhashini_client: Callable[[], Any] = _unconfigured
+get_sarvam_client: Callable[[], SpeechProvider] = _unconfigured
+get_bhashini_client: Callable[[], SpeechProvider] = _unconfigured
+_get_voice_client: Callable[[], SpeechProvider] = _unconfigured
 
 logger = logging.getLogger(__name__)
 
 # Minimum confidence threshold for STT
 STT_CONFIDENCE_THRESHOLD = 0.5
 TTS_MAX_TEXT_LENGTH = 900
-
-
-def _get_voice_client():
-    """Get the configured voice client (Sarvam AI or Bhashini).
-
-    Prefers Sarvam AI when its key is set, falls back to Bhashini. With
-    neither configured this still returns the Sarvam client, which reports
-    itself as unconfigured so callers can tell the user voice is off.
-    """
-    settings = get_settings()
-    if settings.sarvam_api_key:
-        return get_sarvam_client()
-
-    if settings.bhashini_api_key:
-        return get_bhashini_client()
-
-    return get_sarvam_client()
 
 
 # Deliberately narrower than the marker set used for typed messages. A
@@ -308,7 +293,7 @@ async def _handle_voice_message(
         )()
 
     # Check if voice service is configured
-    if not voice_client.api_key:
+    if not voice_client.is_available():
         await telegram.send_text(
             chat_id,
             "🎤 Voice messages will be supported soon! Please type your message for now.\n\n"
@@ -422,7 +407,7 @@ async def _send_response(
         await telegram.send_text(chat_id, last_part)
 
     # For voice requests, also send audio response if voice service is configured
-    if is_voice and voice_client.api_key:
+    if is_voice and voice_client.is_available():
         try:
             clean_tts_text = _clean_for_tts(clean_text)
             if response.language == "hinglish":

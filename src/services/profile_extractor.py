@@ -2,6 +2,7 @@
 
 from typing import Any as Any
 
+from src.dss.application.conversation import profile_extractor as _implementation
 from src.dss.application.conversation.profile_extractor import (
     _INCOME_ATTEMPT_PATTERN as _INCOME_ATTEMPT_PATTERN,
 )
@@ -47,3 +48,5 @@ from src.dss.application.conversation.profile_extractor import (
 )
 from src.dss.domain.profiles.profile import UserProfile as UserProfile
 from src.dss.infrastructure.database.catalog import _load_catalog as _load_catalog
+
+_implementation._load_catalog = _load_catalog
