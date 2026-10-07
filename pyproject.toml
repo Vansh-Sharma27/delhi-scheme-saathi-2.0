@@ -74,9 +74,9 @@ type = "layers"
 layers = [
     "src.services.conversation.service",
     "src.services.conversation.views",
-    "src.services.conversation.turn_policy",
-    "src.services.conversation.intents",
-    "src.services.conversation.scheme_reference",
+    "src.dss.application.conversation.turn_policy",
+    "src.dss.application.conversation.intents",
+    "src.dss.application.conversation.scheme_reference",
     "src.dss.application.conversation.language",
 ]
 # This contract intentionally governs only the six named conversation modules.

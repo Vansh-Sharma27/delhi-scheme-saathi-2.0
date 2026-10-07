@@ -13,6 +13,8 @@ import pytest
     ("services/conversation/language", "conversation/language"),
     ("services/life_event_classifier", "conversation/life_event_classifier"),
     ("services/scheme_relevance", "matching/scheme_relevance"),
+    ("services/conversation/scheme_reference", "conversation/scheme_reference"),
+    ("services/conversation/intents", "conversation/intents"),
 ])
 def test_helper_definitions_match_original(old: str, new: str) -> None:
     root = Path(__file__).resolve().parents[1]
