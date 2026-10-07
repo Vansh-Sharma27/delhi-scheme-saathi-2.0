@@ -83,11 +83,15 @@ async def main():
                 profile = session.user_profile
                 print("📋 Current Profile:")
                 print(f"   State: {session.state.value}")
-                print(f"   Life Event: {profile.life_event}")
-                print(f"   Age: {profile.age}")
-                print(f"   Gender: {profile.gender}")
-                print(f"   Category: {profile.category}")
-                print(f"   Income: {profile.annual_income}")
+                for label, field in (
+                    ("Life Event", "life_event"),
+                    ("Age", "age"),
+                    ("Gender", "gender"),
+                    ("Category", "category"),
+                    ("Income", "annual_income"),
+                ):
+                    status = "provided" if getattr(profile, field) is not None else "missing"
+                    print(f"   {label}: {status}")
                 print(f"   Completeness: {profile.completeness_score}/10")
                 print()
                 continue

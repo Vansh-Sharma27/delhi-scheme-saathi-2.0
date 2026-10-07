@@ -70,6 +70,9 @@ class BhashiniClient:
 
         self._http_client: httpx.AsyncClient | None = None
 
+    def is_available(self) -> bool:
+        return bool(self.api_key)
+
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
         if self._http_client is None or self._http_client.is_closed:

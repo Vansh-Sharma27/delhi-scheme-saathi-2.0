@@ -561,6 +561,12 @@ class InMemorySchemeRepository:
         hits = self._schemes if not active_only else [s for s in self._schemes if s.is_active]
         return sorted(hits, key=lambda s: s.name)
 
+    async def count_active_schemes(self) -> int:
+        return len(await self.get_all_schemes())
+
+    async def list_life_events(self) -> list[dict[str, Any]]:
+        return []
+
     async def hybrid_search(
         self,
         life_event: str | None,
@@ -825,6 +831,9 @@ class FakeSpeechProvider:
     def __init__(self) -> None:
         self.stt_calls: int = 0
         self.tts_calls: int = 0
+
+    def is_available(self) -> bool:
+        return True
 
     async def speech_to_text(
         self,

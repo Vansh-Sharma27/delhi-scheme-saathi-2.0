@@ -120,7 +120,7 @@ class TestVoiceMessageHandling:
 
         # Mock voice client with no API key
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         with patch(
             "src.webhook.handler.get_telegram_client", return_value=mock_telegram
@@ -157,7 +157,7 @@ class TestVoiceMessageHandling:
 
         # Mock voice client with API key
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             return_value=STTResult(
                 text="मुझे पेंशन चाहिए",
@@ -201,7 +201,7 @@ class TestVoiceMessageHandling:
         mock_telegram.download_voice = AsyncMock(return_value=b"audio data")
 
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             return_value=STTResult(
                 text="unclear",
@@ -240,7 +240,7 @@ class TestVoiceMessageHandling:
         mock_telegram = AsyncMock()
         mock_telegram.download_voice = AsyncMock(return_value=b"audio data")
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             side_effect=[
                 STTResult(text="I need housing help", confidence=0.85, language="en"),
@@ -285,7 +285,7 @@ class TestVoiceMessageHandling:
         mock_telegram = AsyncMock()
         mock_telegram.download_voice = AsyncMock(return_value=b"audio data")
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             side_effect=[
                 STTResult(text="General", confidence=0.72, language="en"),
@@ -328,7 +328,7 @@ class TestVoiceMessageHandling:
         mock_telegram = AsyncMock()
         mock_telegram.download_voice = AsyncMock(return_value=b"audio data")
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             side_effect=[
                 STTResult(text="I need application steps", confidence=0.7, language="en"),
@@ -371,7 +371,7 @@ class TestVoiceMessageHandling:
         mock_telegram = AsyncMock()
         mock_telegram.download_voice = AsyncMock(return_value=b"audio data")
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             side_effect=[
                 STTResult(text="I need housing help", confidence=0.82, language="en"),
@@ -417,7 +417,7 @@ class TestVoiceMessageHandling:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.speech_to_text = AsyncMock(
             return_value=STTResult(
                 text="I need housing help",
@@ -511,7 +511,7 @@ class TestTextMessageHandling:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         with patch(
             "src.webhook.handler.get_telegram_client", return_value=mock_telegram
@@ -553,7 +553,7 @@ class TestTextMessageHandling:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         with patch(
             "src.webhook.handler.get_telegram_client", return_value=mock_telegram
@@ -610,7 +610,7 @@ class TestTextMessageHandling:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         with patch(
             "src.webhook.handler.get_telegram_client", return_value=mock_telegram
@@ -644,7 +644,7 @@ class TestSendResponse:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         # Create mock response
         mock_response = MagicMock()
@@ -666,7 +666,7 @@ class TestSendResponse:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = ""
+        mock_voice_client.is_available.return_value = False
 
         mock_response = MagicMock()
         mock_response.text = "Select a scheme:"
@@ -691,7 +691,7 @@ class TestSendResponse:
         mock_telegram = AsyncMock()
 
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.text_to_speech = AsyncMock(
             return_value=TTSResult(
                 audio_bytes=b"audio data",
@@ -728,7 +728,7 @@ class TestSendResponse:
         mock_telegram = AsyncMock()
 
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.text_to_speech = AsyncMock(
             return_value=TTSResult(
                 audio_bytes=b"ogg audio",
@@ -763,7 +763,7 @@ class TestSendResponse:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.text_to_speech = AsyncMock()
 
         mock_response = MagicMock()
@@ -788,7 +788,7 @@ class TestSendResponse:
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
-        mock_voice_client.api_key = "test-key"
+        mock_voice_client.is_available.return_value = True
         mock_voice_client.text_to_speech = AsyncMock()
 
         mock_response = MagicMock()

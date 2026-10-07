@@ -11,5 +11,9 @@
     "src/db/scheme_repo.py": "src/dss/infrastructure/database/scheme_repo.py",
     "src/db/document_repo.py": "src/dss/infrastructure/database/document_repo.py",
     "src/db/office_repo.py": "src/dss/infrastructure/database/office_repo.py",
-    "src/db/rejection_rule_repo.py": "src/dss/infrastructure/database/rejection_rule_repo.py"
+    "src/db/rejection_rule_repo.py": "src/dss/infrastructure/database/rejection_rule_repo.py",
+    "src/services/conversation/service.py": "src/dss/application/conversation/profile_questions.py",
+    "src/services/profile_extractor.py": "src/dss/application/conversation/profile_extractor.py",
+    "src/models/api.py": "src/dss/application/conversation/contracts.py",
+    "src/webhook/handler.py": "src/dss/interfaces/telegram/handler.py"
 }

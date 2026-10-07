@@ -8,7 +8,7 @@ Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guid
 
 ## Migration state
 
-Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Canonical domain values and infrastructure adapters live under `src/dss`; conversation orchestration, rendering, HTTP routes, and composition wiring still live in their existing packages pending Phases 5 and 6.
+Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Phase 5 application and interface extraction is implemented and its local verification gate is green. Conversation analysis, language selection and enforcement, profile updates, transition/reset decisions, turn/snapshot rendering, commands, persistence, compact memory, AI task policy, and matching orchestration have application implementations. Guidance is split into localization, templates, presenters, currency formatting, and generation. HTTP routes and Telegram handling live in `src/dss/interfaces`. The application service successor is below 300 physical lines and every new source file is at most 500 lines. Review, tagging, and merge remain pending; the phase is not formally closed until those steps are completed. Composition-root construction and facade removal belong to Phase 6.
 
 | Area | Current implementation |
 | --- | --- |
@@ -22,16 +22,23 @@ Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma2
 | Queue adapters and payload codec | `src/dss/infrastructure/queues/` |
 | AI providers and unchanged prompt templates | `src/dss/infrastructure/ai/` |
 | Embeddings and speech adapters | `src/dss/infrastructure/embeddings/`, `src/dss/infrastructure/speech/` |
-| Conversation pipeline and rendering | `src/services/conversation/`, `src/services/response_generator.py` |
-| Matching orchestration | `src/services/scheme_matcher.py` |
-| FastAPI routes and Telegram handling | `src/main.py`, `src/webhook/handler.py` |
+| Conversation application use cases and result models | `src/dss/application/conversation/` |
+| Localization, response templates, presenters, generation, currency formatting | `src/dss/application/guidance/` |
+| Presentation facts derived from the existing evaluator | `src/dss/domain/eligibility/presentation_facts.py` |
+| AI usage telemetry | `src/dss/observability/llm_usage.py` |
+| Conversation compatibility entrypoint and view/provider helpers | `src/services/conversation/`, `src/services/response_generator.py` |
+| Matching application orchestration | `src/dss/application/matching/matching_use_case.py` |
+| FastAPI routes and Telegram handling | `src/dss/interfaces/api/routes.py`, `src/dss/interfaces/telegram/` |
+| Startup and interface compatibility wiring | `src/main.py`, `src/webhook/handler.py` |
 | Settings and credential redaction | `src/config.py`, `src/utils/logging_config.py` |
 
-Import-linter enforces three contracts: the six-module conversation order, the modular-monolith layer direction, and the restriction on new `src.dss` imports of legacy wiring. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
+Import-linter enforces four contracts: the six-module conversation order, the modular-monolith layer direction, the restriction on new `src.dss` imports of legacy wiring, and a prohibition on application/interface imports of infrastructure. The fourth contract checks direct and indirect imports. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
 
 Domain code imports no application, infrastructure, or legacy project modules. Infrastructure supplies catalog values to the pure required-fields policy. The application clock import re-exports the domain `Clock` Protocol with the same type identity.
 
 Legacy `src/db`, provider, model, prompt-loader, and catalog paths remain compatibility surfaces until Phase 6. Legacy `Session`, `UserProfile`, and `Scheme` subclasses retain standalone hydration and no-argument catalog helpers. Production services and ports use canonical domain types.
+
+Telegram handling consumes `SpeechProvider.is_available()` and STT/TTS methods without inspecting provider credentials. The legacy webhook facade preserves Sarvam-first selection and injects the selected provider; final provider construction moves into the composition root in Phase 6. HTTP catalog, document, rule, office, health, and taxonomy reads use repository ports. Database access and the existing SQL remain in the adapters. Application services receive prompt, safe-output, and catalog callbacks from legacy wiring rather than importing adapters.
 
 ## Four consumer surfaces
 
@@ -48,7 +55,9 @@ The SAM template defines API Gateway, the API and worker Lambdas, DynamoDB sessi
 
 ## Conversation handling
 
-The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. The conversation package dependency order is `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
+The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. `ConversationApplication` runs the turn pipeline through `TurnAnalyzer`, `LanguagePolicy`, `ProfileUpdateService`, `TransitionPolicy`, `TurnRenderer`, `CommandHandler`, and `TurnPersistence`. `ConversationService` supplies legacy collaborators through constructor-time wiring and keeps the external entrypoint stable. `LanguagePolicy.enforce` delegates to the shared localization path before persistence. `TransitionPolicy` owns resets and stale-selection invalidation. `TurnRenderer.snapshot` re-renders language-switch context explicitly. The profile-question renderer owns skipped-field and validation rendering and the single template-versus-LLM decision. Shared scheme views remain one injected collaborator. The legacy helper dependency order remains `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
+
+Guidance presenters format supplied eligibility facts; they never invoke the evaluator or infer an income band. Guidance orchestration obtains those facts from the domain and preserves the existing deterministic-answer order before LLM generation. API, response-generation, AI-orchestration, and Telegram compatibility surfaces preserve live monkeypatch hooks and shared singleton identity until Phase 6.
 
 The ten states are `GREETING`, `SITUATION_UNDERSTANDING`, `PROFILE_COLLECTION`, `SCHEME_MATCHING`, `SCHEME_PRESENTATION`, `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS`, `APPLICATION_HELP`, and `CSC_HANDOFF`. The four scheme views can move between one another and back to the list. `src/services/fsm.py` owns the transition table.
 
@@ -93,7 +102,7 @@ Optional AI relevance judging follows deterministic matching. Presentation and c
 
 - LLM: Bedrock is preferred when `USE_BEDROCK=true`; Grok is used when configured as the fallback or primary local provider. The default Bedrock identifier is `global.amazon.nova-2-lite-v1:0`; this does not establish India-only processing.
 - Embeddings: Jina `jina-embeddings-v3` is primary, Voyage `voyage-multilingual-2` is fallback, then vector ranking is skipped.
-- Speech: the webhook selects Sarvam when its key exists, otherwise Bhashini when configured. It does not retry Bhashini automatically after a selected Sarvam client fails. Unavailable or low-confidence speech requests fall back to text; the confidence threshold is 0.5.
+- Speech: legacy wiring selects Sarvam when its key exists, otherwise Bhashini when configured. Telegram handling receives the selected speech port and its availability capability. It does not retry Bhashini automatically after a selected Sarvam client fails. Unavailable or low-confidence speech requests fall back to text; the confidence threshold is 0.5.
 - Telegram: text and inline keyboards are sent through the existing client. TTS audio is sent directly as bytes; the current response path does not upload audio to S3. Text above 900 characters skips TTS.
 
 `AIOrchestrator` applies timeouts of 8 seconds for analysis, 3 seconds for relevance judging, 8 seconds for response generation, and 20 seconds for background memory refresh. It records task telemetry and returns task-specific safe outputs on failure. A missing API database pool produces `503`; `/health` reports database state in its JSON response, including disconnected or error states.

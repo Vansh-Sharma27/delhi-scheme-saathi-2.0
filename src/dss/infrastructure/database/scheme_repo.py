@@ -7,7 +7,7 @@ repository ports live in ``src.dss.infrastructure.database.adapters``.
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import asyncpg
 
@@ -30,6 +30,30 @@ from src.dss.infrastructure.database.catalog import (
 from src.dss.infrastructure.database.scheme_codec import scheme_from_row
 
 logger = logging.getLogger(__name__)
+
+
+async def count_active_schemes(pool: asyncpg.Pool) -> int:
+    """Preserve the health endpoint's active-scheme count query."""
+    async with pool.acquire() as conn:
+        count = await conn.fetchval("SELECT COUNT(*) FROM schemes WHERE is_active = true")
+    return cast(int, count or 0)
+
+
+async def list_life_events(pool: asyncpg.Pool) -> list[dict[str, Any]]:
+    """Read the taxonomy in the same order and shape as the HTTP endpoint."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT key, display_name, display_name_hindi, aliases FROM life_events_taxonomy ORDER BY key"
+        )
+    return [
+        {
+            "key": row["key"],
+            "display_name": row["display_name"],
+            "display_name_hindi": row["display_name_hindi"],
+            "aliases": list(row["aliases"] or []),
+        }
+        for row in rows
+    ]
 
 
 async def get_scheme_by_id(pool: asyncpg.Pool, scheme_id: str) -> Scheme | None:
