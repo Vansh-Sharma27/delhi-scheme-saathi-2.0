@@ -18,6 +18,7 @@ from src.dss.application.conversation.keyboards import (
 from src.dss.application.conversation.language_policy import LanguagePolicy
 from src.dss.application.conversation.models import RenderResult
 from src.dss.application.conversation.persistence import TurnPersistence
+from src.dss.application.conversation.profile_fields import ProfileFields
 from src.dss.application.conversation.profile_questions import ProfileQuestionRenderer
 from src.dss.application.conversation.profile_update import ProfileUpdateService
 from src.dss.application.conversation.service import ConversationApplication
@@ -32,6 +33,7 @@ from src.dss.domain.conversations.session import Session
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
+from src.dss.infrastructure.database.catalog import _load_catalog
 from src.dss.settings import get_settings
 from src.models.api import ChatRequest, ChatResponse
 from src.services import (
@@ -104,6 +106,7 @@ class ConversationService:
         )
         questions = ProfileQuestionRenderer(
             run_matching=self._run_matching,
+            profile_extractor=ProfileFields(lambda: _load_catalog().values()),
             response_generator=response_generator,
             session_manager=session_manager,
             views=views,

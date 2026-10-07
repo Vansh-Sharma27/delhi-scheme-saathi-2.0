@@ -5,6 +5,7 @@ from types import ModuleType
 
 from src.dss.application.conversation import profile_extractor
 from src.dss.application.conversation.models import ProfileUpdate, RenderResult, TurnAnalysis
+from src.dss.application.conversation.profile_fields import ProfileFields
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 from src.dss.domain.profiles.profile import UserProfile
@@ -18,6 +19,7 @@ class ProfileQuestionRenderer:
         self,
         *,
         run_matching: Callable[[UserProfile, str, Session, str], Awaitable[RenderResult]],
+        profile_extractor: ProfileFields,
         response_generator: ModuleType,
         session_manager: ModuleType,
         views: ModuleType,
@@ -192,7 +194,7 @@ class ProfileQuestionRenderer:
 
         validation_error = None
         if previously_asking and previously_asking not in analysis.extracted_fields:
-            is_valid, error_type = self.profile_extractor.validate_field_response(
+            is_valid, error_type = profile_extractor.validate_field_response(
                 previously_asking, user_message, analysis.extracted_fields
             )
             if not is_valid and error_type:
@@ -212,7 +214,7 @@ class ProfileQuestionRenderer:
         inline_keyboard = None
 
         if validation_error:
-            text = self.profile_extractor.get_validation_re_prompt(
+            text = profile_extractor.get_validation_re_prompt(
                 previously_asking, validation_error, lang
             )
         elif scope_followup:

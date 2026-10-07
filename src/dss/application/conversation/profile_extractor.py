@@ -1,17 +1,10 @@
 """Profile extraction service."""
 
 import re
-from collections.abc import Callable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from src.dss.domain.profiles.profile import UserProfile
-
-
-def _unconfigured_catalog() -> dict[str, Any]:
-    raise RuntimeError("Profile catalog provider has not been configured")
-
-
-_load_catalog: Callable[[], dict[str, Any]] = _unconfigured_catalog
 
 FIELD_QUESTION_ORDER = ("life_event", "age", "gender", "category", "annual_income")
 
@@ -36,17 +29,22 @@ _INCOME_ATTEMPT_PATTERN = re.compile(
 )
 
 
-def get_required_matching_fields(profile: UserProfile) -> tuple[str, ...]:
+def get_required_matching_fields(
+    profile: UserProfile, *, catalog: Iterable[Mapping[str, Any]],
+) -> tuple[str, ...]:
     """Return the scheme-aware profile fields that matter before matching."""
     return profile.required_fields_for_matching(
-        _load_catalog().values() if profile.life_event else ()
+        catalog if profile.life_event else ()
     )
 
 
-def is_complete_for_matching(profile: UserProfile) -> bool:
+def is_complete_for_matching(
+    profile: UserProfile, *, catalog: Iterable[Mapping[str, Any]],
+) -> bool:
     """Check completeness using infrastructure-supplied catalog values."""
     return all(
-        getattr(profile, field) is not None for field in get_required_matching_fields(profile)
+        getattr(profile, field) is not None
+        for field in get_required_matching_fields(profile, catalog=catalog)
     )
 
 
@@ -245,7 +243,9 @@ def extract_by_patterns(
     return extracted
 
 
-def get_missing_fields(profile: UserProfile) -> list[str]:
+def get_missing_fields(
+    profile: UserProfile, *, catalog: Iterable[Mapping[str, Any]],
+) -> list[str]:
     """Get list of missing fields that should be collected."""
     missing = []
 
@@ -258,7 +258,7 @@ def get_missing_fields(profile: UserProfile) -> list[str]:
         "employment_status": "employment status",
     }
 
-    for field in get_required_matching_fields(profile):
+    for field in get_required_matching_fields(profile, catalog=catalog):
         if getattr(profile, field) is None:
             missing.append(display_names.get(field, field))
 
@@ -268,10 +268,11 @@ def get_missing_fields(profile: UserProfile) -> list[str]:
 def get_next_missing_field(
     profile: UserProfile,
     skipped_fields: list[str] | None = None,
+    *, catalog: Iterable[Mapping[str, Any]],
 ) -> str | None:
     """Return the name of the next missing profile field, or None if all filled."""
     skipped = set(skipped_fields or [])
-    required_fields = set(get_required_matching_fields(profile))
+    required_fields = set(get_required_matching_fields(profile, catalog=catalog))
     for field in FIELD_QUESTION_ORDER:
         if field not in required_fields:
             continue
@@ -286,6 +287,7 @@ def get_next_question(
     profile: UserProfile,
     language: str = "hi",
     skipped_fields: list[str] | None = None,
+    *, catalog: Iterable[Mapping[str, Any]],
 ) -> str | None:
     """Get the next question to ask based on missing profile fields."""
     questions = {
@@ -317,7 +319,7 @@ def get_next_question(
     }
 
     skipped = set(skipped_fields or [])
-    required_fields = set(get_required_matching_fields(profile))
+    required_fields = set(get_required_matching_fields(profile, catalog=catalog))
     for field in FIELD_QUESTION_ORDER:
         if field not in required_fields:
             continue
