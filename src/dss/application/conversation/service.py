@@ -19,7 +19,6 @@ class ConversationApplication:
         self,
         *,
         dependencies: Any,
-        policies: Any,
         analyzer: TurnAnalyzer,
         language_policy: LanguagePolicy,
         profile_updates: ProfileUpdateService,
@@ -31,7 +30,6 @@ class ConversationApplication:
         clock: Any,
     ) -> None:
         self.dependencies = dependencies
-        self.policies = policies
         self.turn_analyzer = analyzer
         self.language_policy = language_policy
         self.profile_update_service = profile_updates
@@ -71,7 +69,7 @@ class ConversationApplication:
 
         analysis = await self.turn_analyzer.analyze(session, user_message)
         session, lang, language_changed = self.language_policy.resolve(
-            session, analysis, policies=self.policies
+            session, analysis
         )
 
         early_reply = await self._handle_turn_reset(
@@ -85,7 +83,7 @@ class ConversationApplication:
             return early_reply
 
         session, profile_update = self.profile_update_service.apply(
-            session, analysis, user_message, policies=self.policies
+            session, analysis, user_message
         )
         profile = session.user_profile
 
@@ -94,7 +92,6 @@ class ConversationApplication:
             analysis,
             profile_update,
             user_message,
-            policies=self.policies,
         )
 
         result = await self.renderer.render(
@@ -141,7 +138,6 @@ class ConversationApplication:
             analysis,
             lang,
             language_changed,
-            policies=self.policies,
             responses=self.dependencies.response_generator,
         )
         if reset is None:

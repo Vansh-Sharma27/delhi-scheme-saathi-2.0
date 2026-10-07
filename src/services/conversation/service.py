@@ -1,12 +1,11 @@
 """Compatibility wiring for the application conversation pipeline."""
 
 import sys
-from types import SimpleNamespace
 
 import asyncpg
 
 from src.db.session_store import SessionStore
-from src.dss.application.conversation import language, life_event_classifier
+from src.dss.application.conversation import intents, language, scheme_reference, turn_policy
 from src.dss.application.conversation.commands import CommandHandler
 from src.dss.application.conversation.keyboards import (
     format_inline_keyboard,
@@ -37,15 +36,13 @@ from src.dss.infrastructure.database.catalog import _load_catalog
 from src.dss.settings import get_settings
 from src.models.api import ChatRequest, ChatResponse
 from src.services import (
-    fsm,
-    profile_extractor,
     response_generator,
     scheme_matcher,
     session_manager,
 )
 from src.services.ai_background import enqueue_memory_refresh as enqueue_memory_refresh
 from src.services.ai_orchestrator import AIOrchestrator, get_ai_orchestrator
-from src.services.conversation import intents, scheme_reference, turn_policy, views
+from src.services.conversation import views
 from src.services.conversation_memory import (
     should_refresh_working_memory as should_refresh_working_memory,
 )
@@ -67,22 +64,13 @@ class ConversationService:
         self.ai = ai_orchestrator or get_ai_orchestrator()
         self.session_store = session_store
         self.clock = clock
-        self.policies = SimpleNamespace(
-            fsm=fsm,
-            intents=intents,
-            language=language,
-            life_event_classifier=life_event_classifier,
-            profile_extractor=profile_extractor,
-            scheme_reference=scheme_reference,
-            session_manager=session_manager,
-            turn_policy=turn_policy,
-        )
+        self.fields = ProfileFields(lambda: _load_catalog().values())
         self.turn_analyzer = TurnAnalyzer(
-            self.ai, policies=self.policies, get_system_prompt=get_analysis_system_prompt
+            self.ai, get_system_prompt=get_analysis_system_prompt
         )
         self.language_policy = LanguagePolicy()
         self.profile_update_service = ProfileUpdateService()
-        self.transition_policy = TransitionPolicy()
+        self.transition_policy = TransitionPolicy(self.fields)
         # Keep the raw client reachable for existing tests and narrow mocks.
         self.llm = self.ai.llm_client
         self.matching = MatchingUseCase(
@@ -106,7 +94,7 @@ class ConversationService:
         )
         questions = ProfileQuestionRenderer(
             run_matching=self._run_matching,
-            profile_extractor=ProfileFields(lambda: _load_catalog().values()),
+            profile_extractor=self.fields,
             response_generator=response_generator,
             session_manager=session_manager,
             views=views,
@@ -117,7 +105,7 @@ class ConversationService:
             self.pool,
             questions=questions,
             run_matching=self._run_matching,
-            profile_extractor=profile_extractor,
+            profile_extractor=self.fields,
             response_generator=response_generator,
             session_manager=session_manager,
             views=views,
@@ -144,7 +132,6 @@ class ConversationService:
         )
         self.application = ConversationApplication(
             dependencies=dependencies,
-            policies=self.policies,
             analyzer=self.turn_analyzer,
             language_policy=self.language_policy,
             profile_updates=self.profile_update_service,

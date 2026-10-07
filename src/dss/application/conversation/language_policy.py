@@ -2,6 +2,8 @@
 
 from typing import Any, cast
 
+from src.dss.application.conversation import language
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.models import TurnAnalysis
 from src.dss.domain.conversations.session import Session
 
@@ -16,10 +18,8 @@ class LanguagePolicy:
 
     @staticmethod
     def resolve(
-        session: Session, analysis: TurnAnalysis, *, policies: Any
+        session: Session, analysis: TurnAnalysis
     ) -> tuple[Session, str, bool]:
-        session_manager = policies.session_manager
-        language = policies.language
         if analysis.explicit_language:
             language_changed = session.language_preference != analysis.explicit_language
             session = session_manager.set_language(session, analysis.explicit_language, locked=True)

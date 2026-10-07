@@ -7,6 +7,7 @@ from typing import cast
 import asyncpg
 
 from src.dss.application.conversation.models import ProfileUpdate, RenderResult, TurnAnalysis
+from src.dss.application.conversation.profile_fields import ProfileFields
 from src.dss.application.conversation.profile_questions import ProfileQuestionRenderer
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
@@ -29,7 +30,7 @@ class TurnRenderer:
         *,
         questions: ProfileQuestionRenderer,
         run_matching: Callable[[UserProfile, str, Session, str], Awaitable[RenderResult]],
-        profile_extractor: ModuleType,
+        profile_extractor: ProfileFields,
         response_generator: ModuleType,
         session_manager: ModuleType,
         views: ModuleType,

@@ -1,23 +1,30 @@
 """Application use case for analyzing one conversation turn."""
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
+from src.dss.application.conversation import (
+    intents,
+    language,
+    life_event_classifier,
+    profile_extractor,
+    scheme_reference,
+    sessions,
+    turn_policy,
+)
 from src.dss.application.conversation.models import TurnAnalysis
+from src.dss.application.ports.ai_tasks import AITasks
 from src.dss.domain.conversations.session import Session
 
 
 class TurnAnalyzer:
     """Run LLM analysis and apply deterministic conversation guardrails."""
 
-    def __init__(self, ai: Any, *, policies: Any, get_system_prompt: Callable[[], str]) -> None:
+    def __init__(self, ai: AITasks, *, get_system_prompt: Callable[[], str]) -> None:
         self.ai = ai
-        self.policies = policies
         self.get_system_prompt = get_system_prompt
 
     async def analyze(self, session: Session, user_message: str) -> TurnAnalysis:
-        language = self.policies.language
-        intents = self.policies.intents
         explicit_language = language.detect_explicit_language_request(user_message)
         explicit_topic_switch = intents.is_explicit_topic_switch(user_message)
         inferred_turn_language = explicit_language or language.infer_text_language(user_message)
@@ -33,7 +40,7 @@ class TurnAnalyzer:
         analysis = await self.ai.analyze_message(
             session=session,
             user_message=user_message,
-            conversation_history=self.policies.session_manager.get_conversation_history(
+            conversation_history=sessions.get_conversation_history(
                 session, include_assistant=bool(session.currently_asking)
             ),
             system_prompt=self.get_system_prompt(),
@@ -80,8 +87,6 @@ class TurnAnalyzer:
     def _merge_extracted_fields(
         self, session: Session, user_message: str, llm_fields: dict[str, Any]
     ) -> dict[str, Any]:
-        profile_extractor = self.policies.profile_extractor
-        turn_policy = self.policies.turn_policy
         rule_based_fields = profile_extractor.extract_by_patterns(
             user_message, current_field=session.currently_asking
         )
@@ -93,7 +98,7 @@ class TurnAnalyzer:
             if contextual:
                 field_name, value = contextual
                 merged[field_name] = value
-        return cast(dict[str, Any], merged)
+        return merged
 
     def _resolve_life_event(
         self,
@@ -103,15 +108,12 @@ class TurnAnalyzer:
         explicit_topic_switch: bool,
         current_life_event: str | None,
     ) -> str | None:
-        life_event_classifier = self.policies.life_event_classifier
         detected = llm_life_event
         if explicit_topic_switch:
             classified = life_event_classifier.classify_by_keywords(user_message)
             if classified and classified != current_life_event:
-                return cast(str | None, classified)
-        return cast(
-            str | None, detected or life_event_classifier.classify_by_keywords(user_message)
-        )
+                return classified
+        return detected or life_event_classifier.classify_by_keywords(user_message)
 
     def _resolve_scheme_id(
         self,
@@ -121,14 +123,10 @@ class TurnAnalyzer:
         llm_scheme_id: str | None,
         explicit_topic_switch: bool,
     ) -> str | None:
-        scheme_reference = self.policies.scheme_reference
         if explicit_topic_switch:
             return None
         validated = scheme_reference.validated_selected_scheme_id(session, llm_scheme_id)
-        return cast(
-            str | None,
-            validated or scheme_reference.resolve_scheme_from_text(session, user_message),
-        )
+        return validated or scheme_reference.resolve_scheme_from_text(session, user_message)
 
     def _resolve_action(
         self,
@@ -139,8 +137,6 @@ class TurnAnalyzer:
         resolved_scheme_id: str | None,
         explicit_topic_switch: bool,
     ) -> str | None:
-        intents = self.policies.intents
-        turn_policy = self.policies.turn_policy
         action = (
             intents.detect_action_override(
                 user_message,
