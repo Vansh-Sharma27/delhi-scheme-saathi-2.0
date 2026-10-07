@@ -15,5 +15,6 @@
     "src/services/conversation/service.py": "src/dss/application/conversation/profile_questions.py",
     "src/services/profile_extractor.py": "src/dss/application/conversation/profile_extractor.py",
     "src/models/api.py": "src/dss/application/conversation/contracts.py",
-    "src/webhook/handler.py": "src/dss/interfaces/telegram/handler.py"
+    "src/webhook/handler.py": "src/dss/interfaces/telegram/handler.py",
+    "src/utils/validators.py": "src/dss/application/conversation/validators.py"
 }
