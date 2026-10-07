@@ -7,6 +7,13 @@ import asyncpg
 
 from src.db.session_store import SessionStore
 from src.dss.application.conversation.commands import CommandHandler
+from src.dss.application.conversation.keyboards import (
+    format_inline_keyboard,
+    format_presented_scheme_keyboard,
+)
+from src.dss.application.conversation.keyboards import (
+    format_language_keyboard as format_language_keyboard,
+)
 from src.dss.application.conversation.language_policy import LanguagePolicy
 from src.dss.application.conversation.models import RenderResult
 from src.dss.application.conversation.persistence import TurnPersistence
@@ -16,6 +23,7 @@ from src.dss.application.conversation.service import ConversationApplication
 from src.dss.application.conversation.transition_policy import TransitionPolicy
 from src.dss.application.conversation.turn_analyzer import TurnAnalyzer
 from src.dss.application.conversation.turn_renderer import TurnRenderer
+from src.dss.application.conversation.validators import sanitize_input as sanitize_input
 from src.dss.application.matching.matching_use_case import MatchingUseCase
 from src.dss.application.ports.clock import Clock
 from src.dss.domain.conversations.session import Session
@@ -39,12 +47,6 @@ from src.services.conversation import intents, language, scheme_reference, turn_
 from src.services.conversation_memory import (
     should_refresh_working_memory as should_refresh_working_memory,
 )
-from src.utils.keyboards import (
-    format_inline_keyboard,
-    format_presented_scheme_keyboard,
-)
-from src.utils.keyboards import format_language_keyboard as format_language_keyboard
-from src.utils.validators import sanitize_input as sanitize_input
 
 
 class ConversationService:
