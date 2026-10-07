@@ -17,17 +17,8 @@ from src.dss.domain.conversations.session import ConversationMemory, Session
 from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.observability.llm_usage import LLMUsageEvent as LLMUsageEvent
 from src.dss.observability.llm_usage import log_llm_usage
+from src.dss.settings import Settings
 
-
-def _unconfigured_settings(*args: Any, **kwargs: Any) -> Any:
-    raise RuntimeError("Application settings provider has not been configured")
-
-
-get_settings: Callable[[], Any] = _unconfigured_settings
-get_llm_client: Callable[[], LLMProvider] = _unconfigured_settings
-safe_analysis_payload: Callable[[str], dict[str, Any]] = _unconfigured_settings
-safe_relevance_payload: Callable[[list[dict[str, Any]]], dict[str, Any]] = _unconfigured_settings
-safe_generation_text: Callable[[str], str] = _unconfigured_settings
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -67,13 +58,20 @@ class AIOrchestrator:
 
     def __init__(
         self,
-        llm_client: LLMProvider | None = None,
+        llm_client: LLMProvider,
         *,
+        settings: Settings,
+        safe_analysis: Callable[[str], dict[str, Any]],
+        safe_relevance: Callable[[list[dict[str, Any]]], dict[str, Any]],
+        safe_generation: Callable[[str], str],
         policies: Mapping[AITaskType, AIExecutionPolicy] | None = None,
         usage_sink: Callable[[LLMUsageEvent], None] | None = None,
     ) -> None:
-        self.settings = get_settings()
-        self.llm_client = llm_client or get_llm_client()
+        self.settings = settings
+        self.llm_client = llm_client
+        self.safe_analysis = safe_analysis
+        self.safe_relevance = safe_relevance
+        self.safe_generation = safe_generation
         self._policies = dict(self._POLICIES)
         if policies:
             self._policies.update(policies)
@@ -178,12 +176,9 @@ class AIOrchestrator:
         second_score = matches[1].deterministic_score if len(matches) > 1 else 0.0
         score_gap = top_score - second_score
 
-        return cast(
-            bool,
-            (
-                top_score <= self.settings.ai_relevance_min_deterministic_score
-                or score_gap < self.settings.ai_relevance_score_gap_threshold
-            ),
+        return (
+            top_score <= self.settings.ai_relevance_min_deterministic_score
+            or score_gap < self.settings.ai_relevance_score_gap_threshold
         )
 
     async def analyze_message(
@@ -238,7 +233,7 @@ class AIOrchestrator:
                     )
                 )
             ),
-            safe_output=lambda: safe_analysis_payload(session_language),
+            safe_output=lambda: self.safe_analysis(session_language),
         )
 
     async def judge_scheme_relevance(
@@ -290,7 +285,7 @@ class AIOrchestrator:
                     )
                 )
             ),
-            safe_output=lambda: safe_relevance_payload(candidate_schemes),
+            safe_output=lambda: self.safe_relevance(candidate_schemes),
         )
 
     async def generate_response(
@@ -335,7 +330,7 @@ class AIOrchestrator:
                     )
                 )
             ),
-            safe_output=lambda: safe_generation_text(user_language),
+            safe_output=lambda: self.safe_generation(user_language),
         )
 
     async def refresh_working_memory(
@@ -381,20 +376,3 @@ class AIOrchestrator:
         if refreshed == session.working_memory:
             return session.working_memory
         return refreshed
-
-
-_ai_orchestrator: AIOrchestrator | None = None
-
-
-def configure_ai_orchestrator(orchestrator: AIOrchestrator | None) -> None:
-    """Override the shared AI orchestrator instance."""
-    global _ai_orchestrator
-    _ai_orchestrator = orchestrator
-
-
-def get_ai_orchestrator() -> AIOrchestrator:
-    """Return the shared AI orchestrator singleton."""
-    global _ai_orchestrator
-    if _ai_orchestrator is None:
-        _ai_orchestrator = AIOrchestrator()
-    return _ai_orchestrator
