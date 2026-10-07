@@ -34,6 +34,10 @@ from typing import Any
 import pytest
 
 from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
+from src.dss.application.matching.scheme_relevance import (
+    CLARIFY_CONFIDENCE_THRESHOLD,
+    PRESENT_CONFIDENCE_THRESHOLD,
+)
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.embeddings import EmbeddingProvider
@@ -69,10 +73,6 @@ from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule
 from src.models.session import Session
 from src.services.ai_orchestrator import AIOrchestrator, AITaskType
-from src.services.scheme_relevance import (
-    CLARIFY_CONFIDENCE_THRESHOLD,
-    PRESENT_CONFIDENCE_THRESHOLD,
-)
 
 
 def test_llm_port_conformance() -> None:

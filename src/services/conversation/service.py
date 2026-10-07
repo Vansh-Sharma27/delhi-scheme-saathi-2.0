@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import asyncpg
 
 from src.db.session_store import SessionStore
+from src.dss.application.conversation import language, life_event_classifier
 from src.dss.application.conversation.commands import CommandHandler
 from src.dss.application.conversation.keyboards import (
     format_inline_keyboard,
@@ -24,6 +25,7 @@ from src.dss.application.conversation.transition_policy import TransitionPolicy
 from src.dss.application.conversation.turn_analyzer import TurnAnalyzer
 from src.dss.application.conversation.turn_renderer import TurnRenderer
 from src.dss.application.conversation.validators import sanitize_input as sanitize_input
+from src.dss.application.matching import scheme_relevance
 from src.dss.application.matching.matching_use_case import MatchingUseCase
 from src.dss.application.ports.clock import Clock
 from src.dss.domain.conversations.session import Session
@@ -34,16 +36,14 @@ from src.dss.settings import get_settings
 from src.models.api import ChatRequest, ChatResponse
 from src.services import (
     fsm,
-    life_event_classifier,
     profile_extractor,
     response_generator,
     scheme_matcher,
-    scheme_relevance,
     session_manager,
 )
 from src.services.ai_background import enqueue_memory_refresh as enqueue_memory_refresh
 from src.services.ai_orchestrator import AIOrchestrator, get_ai_orchestrator
-from src.services.conversation import intents, language, scheme_reference, turn_policy, views
+from src.services.conversation import intents, scheme_reference, turn_policy, views
 from src.services.conversation_memory import (
     should_refresh_working_memory as should_refresh_working_memory,
 )

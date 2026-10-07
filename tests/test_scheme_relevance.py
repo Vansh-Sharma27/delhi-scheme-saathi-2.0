@@ -1,7 +1,7 @@
 """Tests for AI relevance gating over deterministic scheme matches."""
 
+from src.dss.application.matching.scheme_relevance import apply_relevance_judgement
 from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.services.scheme_relevance import apply_relevance_judgement
 
 
 def _make_match() -> SchemeMatch:

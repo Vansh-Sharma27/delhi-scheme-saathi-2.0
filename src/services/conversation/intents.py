@@ -11,9 +11,9 @@ or profile state live in :mod:`turn_policy`.
 
 import re
 
+from src.dss.application.conversation.language import detect_explicit_language_request
 from src.dss.domain.conversations.states import ConversationState
 from src.services.conversation import scheme_reference
-from src.services.conversation.language import detect_explicit_language_request
 
 TOPIC_SWITCH_PATTERNS = (
     r"\bnow i need\b",

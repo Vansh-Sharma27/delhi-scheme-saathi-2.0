@@ -12,12 +12,12 @@ past that on its own.
 import asyncpg
 
 from src.db import office_repo, scheme_repo
+from src.dss.application.conversation.language import text_variant
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import EligibilityCriteria, SchemeMatch
 from src.services import document_resolver, rejection_engine, response_generator
-from src.services.conversation.language import text_variant
 
 LIFE_EVENT_ICONS = {
     "HOUSING": "🏠",
