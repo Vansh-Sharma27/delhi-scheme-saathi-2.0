@@ -7,13 +7,19 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("name", ["validators", "keyboards"])
-def test_helper_definitions_match_original(name: str) -> None:
+@pytest.mark.parametrize("old,new", [
+    ("utils/validators", "conversation/validators"),
+    ("utils/keyboards", "conversation/keyboards"),
+    ("services/conversation/language", "conversation/language"),
+    ("services/life_event_classifier", "conversation/life_event_classifier"),
+    ("services/scheme_relevance", "matching/scheme_relevance"),
+])
+def test_helper_definitions_match_original(old: str, new: str) -> None:
     root = Path(__file__).resolve().parents[1]
     original = subprocess.check_output(
-        ["git", "show", f"d8148ee:src/utils/{name}.py"], cwd=root,
+        ["git", "show", f"d8148ee:src/{old}.py"], cwd=root,
     ).decode("utf-8")
-    current = (root / f"src/dss/application/conversation/{name}.py").read_text(encoding="utf-8")
+    current = (root / f"src/dss/application/{new}.py").read_text(encoding="utf-8")
 
     def definitions(source):
         return [ast.dump(node) for node in ast.parse(source).body if isinstance(

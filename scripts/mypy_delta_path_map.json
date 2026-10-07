@@ -16,5 +16,6 @@
     "src/services/profile_extractor.py": "src/dss/application/conversation/profile_extractor.py",
     "src/models/api.py": "src/dss/application/conversation/contracts.py",
     "src/webhook/handler.py": "src/dss/interfaces/telegram/handler.py",
-    "src/utils/validators.py": "src/dss/application/conversation/validators.py"
+    "src/utils/validators.py": "src/dss/application/conversation/validators.py",
+    "src/services/life_event_classifier.py": "src/dss/application/conversation/life_event_classifier.py"
 }

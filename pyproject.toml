@@ -77,7 +77,7 @@ layers = [
     "src.services.conversation.turn_policy",
     "src.services.conversation.intents",
     "src.services.conversation.scheme_reference",
-    "src.services.conversation.language",
+    "src.dss.application.conversation.language",
 ]
 # This contract intentionally governs only the six named conversation modules.
 # Imports to modules outside this package are not constrained by this layer rule.
