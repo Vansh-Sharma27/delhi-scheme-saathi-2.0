@@ -8,8 +8,8 @@ import sys
 import httpx
 import pytest
 
-from src.utils import logging_config
-from src.utils.logging_config import REDACTED, RedactingFilter, configure_logging
+from src.dss.bootstrap.logging import configure_logging, secret_values
+from src.dss.observability.logging_config import REDACTED, RedactingFilter, SecretProvider, redact
 
 # Structurally a Telegram token but never a live one.
 FAKE_BOT_TOKEN = "123456789:AA-fake-token-used-only-in-tests"
@@ -44,9 +44,9 @@ def _record(msg: str, args: object = (), exc_info: object = None) -> logging.Log
 
 
 @pytest.fixture
-def only_bot_token(monkeypatch: pytest.MonkeyPatch) -> None:
+def only_bot_token() -> SecretProvider:
     """Treat the fake bot token as the only configured secret."""
-    monkeypatch.setattr(logging_config, "_secret_values", lambda: (FAKE_BOT_TOKEN,))
+    return lambda: (FAKE_BOT_TOKEN,)
 
 
 def test_configure_logging_updates_existing_root_handlers() -> None:
@@ -76,36 +76,36 @@ def test_configure_logging_updates_existing_root_handlers() -> None:
         root_logger.setLevel(original_level)
 
 
-def test_filter_redacts_bot_token_from_exception_argument(only_bot_token: None) -> None:
+def test_filter_redacts_bot_token_from_exception_argument(only_bot_token: SecretProvider) -> None:
     """`logger.error("...: %s", exc)` must not write the token to the sink."""
     record = _record("Failed to send Telegram message: %s", (_telegram_status_error(),))
 
-    assert RedactingFilter().filter(record) is True
+    assert RedactingFilter(only_bot_token).filter(record) is True
 
     message = record.getMessage()
     assert FAKE_BOT_TOKEN not in message
     assert REDACTED in message
 
 
-def test_filter_redacts_bot_token_from_traceback(only_bot_token: None) -> None:
+def test_filter_redacts_bot_token_from_traceback(only_bot_token: SecretProvider) -> None:
     """The exc_info=True path renders the exception separately and also leaks."""
     try:
         raise _telegram_status_error()
     except httpx.HTTPStatusError:
         record = _record("send failed", exc_info=sys.exc_info())
 
-    assert RedactingFilter().filter(record) is True
+    assert RedactingFilter(only_bot_token).filter(record) is True
 
     assert record.exc_text is not None
     assert FAKE_BOT_TOKEN not in record.exc_text
     assert REDACTED in record.exc_text
 
 
-def test_filter_leaves_clean_records_untouched(only_bot_token: None) -> None:
+def test_filter_leaves_clean_records_untouched(only_bot_token: SecretProvider) -> None:
     """Records without secrets keep their original msg and args for handlers."""
     record = _record("scheme matched for %s in %d ms", ("SCH-DELHI-001", 12))
 
-    assert RedactingFilter().filter(record) is True
+    assert RedactingFilter(only_bot_token).filter(record) is True
 
     assert record.msg == "scheme matched for %s in %d ms"
     assert record.args == ("SCH-DELHI-001", 12)
@@ -145,16 +145,16 @@ def test_secret_values_picks_up_configured_credentials(
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", FAKE_BOT_TOKEN)
     get_settings.cache_clear()
-    logging_config._secret_values.cache_clear()
+    secret_values.cache_clear()
 
     try:
-        assert FAKE_BOT_TOKEN in logging_config._secret_values()
-        assert logging_config.redact(f"url=.../bot{FAKE_BOT_TOKEN}/send") == (
+        assert FAKE_BOT_TOKEN in secret_values()
+        assert redact(f"url=.../bot{FAKE_BOT_TOKEN}/send", secret_values()) == (
             f"url=.../bot{REDACTED}/send"
         )
     finally:
         get_settings.cache_clear()
-        logging_config._secret_values.cache_clear()
+        secret_values.cache_clear()
 
 
 def test_secret_values_ignores_short_values(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -163,10 +163,10 @@ def test_secret_values_ignores_short_values(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "abc")
     get_settings.cache_clear()
-    logging_config._secret_values.cache_clear()
+    secret_values.cache_clear()
 
     try:
-        assert "abc" not in logging_config._secret_values()
+        assert "abc" not in secret_values()
     finally:
         get_settings.cache_clear()
-        logging_config._secret_values.cache_clear()
+        secret_values.cache_clear()
