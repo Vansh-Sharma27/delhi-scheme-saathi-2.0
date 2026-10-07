@@ -8,6 +8,7 @@ import pytest
 from src.db.session_store import InMemorySessionStore, configure_session_store, get_session_store
 from src.dss.application.conversation.language import infer_text_language
 from src.dss.application.conversation.life_event_classifier import classify_by_keywords
+from src.dss.application.conversation.scheme_reference import resolve_scheme_from_text
 from src.models.api import ChatRequest
 from src.models.document import Document, DocumentChain
 from src.models.rejection_rule import RejectionRule
@@ -15,7 +16,6 @@ from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
 from src.models.session import ConversationState, Message, Session, UserProfile
 from src.services import response_generator
 from src.services.conversation import ConversationService
-from src.services.conversation.scheme_reference import resolve_scheme_from_text
 from src.services.conversation.views import truncate_at_sentence
 
 ACTIVE_SCHEME_SEEDS = [

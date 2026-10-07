@@ -1,13 +1,23 @@
 """Tests for FSM transitions."""
 
+from functools import partial
+
 import pytest
 
-from src.models.session import ConversationState, Session, UserProfile
-from src.services.fsm import (
+from src.dss.application.conversation import fsm
+from src.dss.application.conversation.fsm import (
     FSMTransitionError,
     can_transition,
-    determine_next_state,
     transition,
+)
+from src.dss.application.conversation.profile_fields import ProfileFields
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.infrastructure.database.catalog import _load_catalog
+
+determine_next_state = partial(
+    fsm.determine_next_state, fields=ProfileFields(lambda: _load_catalog().values()),
 )
 
 
