@@ -1,14 +1,16 @@
-"""Settings behavior and transitional facade coverage until contraction."""
+"""Canonical settings ownership, cache behavior, and original-definition invariants."""
 
+import ast
 import os
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from src import config
 from src.dss import settings
+from src.dss.settings import get_settings
 
 
 @pytest.fixture
@@ -25,23 +27,22 @@ def isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterat
         settings.get_settings.cache_clear()
 
 
-def test_legacy_settings_exports_are_canonical() -> None:
-    """Transitional: the facade shares objects until the settings contract slice."""
-    assert config.Settings is settings.Settings
-    assert config.get_settings is settings.get_settings
+def test_canonical_settings_owns_singleton() -> None:
+    assert get_settings is settings.get_settings
     assert settings.Settings.__module__ == "src.dss.settings"
     assert settings.get_settings.__module__ == "src.dss.settings"
     assert settings.get_settings.cache_parameters() == {"maxsize": 1, "typed": False}
 
 
-def test_legacy_settings_environment_and_cache_are_shared(
+def test_settings_environment_and_cache_are_shared(
     isolated_settings: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Transitional: clearing either import path invalidates the same cache."""
+    """Module and direct imports share the singleton and its invalidation."""
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("AI_INLINE_CONCURRENCY", "7")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", " https://one.example, ,https://two.example ")
-    first = config.get_settings()
+    first = get_settings()
+    assert type(first) is settings.Settings
     assert settings.get_settings() is first
     assert first.debug is True
     assert first.is_production is False
@@ -50,15 +51,15 @@ def test_legacy_settings_environment_and_cache_are_shared(
 
     monkeypatch.setenv("DEBUG", "false")
     assert settings.get_settings() is first
-    assert config.get_settings().debug is True
-    config.get_settings.cache_clear()
+    assert get_settings().debug is True
+    get_settings.cache_clear()
     second = settings.get_settings()
-    assert config.get_settings() is second
+    assert get_settings() is second
     assert second is not first
     assert second.is_production is True
 
     settings.get_settings.cache_clear()
-    third = config.get_settings()
+    third = get_settings()
     assert third is not second
     assert settings.get_settings() is third
 
@@ -91,3 +92,21 @@ def test_settings_dotenv_and_environment_precedence(
     assert value.xai_model == "नमस्ते"
     assert "unrelated_setting" not in value.model_dump()
     assert settings.Settings(ai_inline_concurrency=3).ai_inline_concurrency == 3
+
+
+@pytest.mark.parametrize("name", ["Settings", "get_settings"])
+def test_settings_definition_matches_pre_migration_source(name: str) -> None:
+    """Pin every field/default/description/property and the cache without a live facade."""
+    original = subprocess.check_output(
+        ["git", "show", "d8148ee:src/config.py"],
+        cwd=Path(__file__).resolve().parents[1],
+    ).decode("utf-8")
+    current = Path(settings.__file__).read_text(encoding="utf-8")
+
+    def definition(source: str) -> str:
+        return ast.dump(next(
+            node for node in ast.parse(source).body
+            if isinstance(node, ast.ClassDef | ast.FunctionDef) and node.name == name
+        ))
+
+    assert definition(current) == definition(original)
