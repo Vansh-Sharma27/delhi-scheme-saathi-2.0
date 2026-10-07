@@ -7,9 +7,9 @@ import json
 import logging
 from typing import Any
 
-from src.config import get_settings
 from src.db.session_store import DynamoDBSessionStore, configure_session_store
 from src.dss.infrastructure.queues.work_queue import deserialize_work_item
+from src.dss.settings import get_settings
 from src.services.ai_background import process_work_item
 from src.utils.logging_config import configure_logging
 

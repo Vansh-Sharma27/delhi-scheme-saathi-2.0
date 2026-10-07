@@ -2,11 +2,11 @@
 
 import sys
 
-from src.config import get_settings
 from src.dss.application.ports.speech import SpeechProvider
 from src.dss.infrastructure.speech.bhashini import get_bhashini_client
 from src.dss.infrastructure.speech.sarvam import get_sarvam_client
 from src.dss.interfaces.telegram import handler as _implementation
+from src.dss.settings import get_settings
 from src.integrations.telegram import get_telegram_client
 from src.services import session_manager
 from src.services.conversation import ConversationService, language

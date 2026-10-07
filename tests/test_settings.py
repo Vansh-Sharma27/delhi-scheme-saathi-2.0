@@ -1,4 +1,4 @@
-"""Compatibility coverage for the Phase 6 settings expand slice."""
+"""Settings behavior and transitional facade coverage until contraction."""
 
 import os
 from collections.abc import Iterator
@@ -26,6 +26,7 @@ def isolated_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterat
 
 
 def test_legacy_settings_exports_are_canonical() -> None:
+    """Transitional: the facade shares objects until the settings contract slice."""
     assert config.Settings is settings.Settings
     assert config.get_settings is settings.get_settings
     assert settings.Settings.__module__ == "src.dss.settings"
@@ -33,9 +34,10 @@ def test_legacy_settings_exports_are_canonical() -> None:
     assert settings.get_settings.cache_parameters() == {"maxsize": 1, "typed": False}
 
 
-def test_settings_environment_and_cache_are_shared(
+def test_legacy_settings_environment_and_cache_are_shared(
     isolated_settings: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Transitional: clearing either import path invalidates the same cache."""
     monkeypatch.setenv("DEBUG", "true")
     monkeypatch.setenv("AI_INLINE_CONCURRENCY", "7")
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", " https://one.example, ,https://two.example ")

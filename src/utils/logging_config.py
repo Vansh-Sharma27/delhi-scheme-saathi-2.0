@@ -23,7 +23,7 @@ def _secret_values() -> tuple[str, ...]:
     the environment should call ``_secret_values.cache_clear()`` alongside
     ``get_settings.cache_clear()``.
     """
-    from src.config import get_settings
+    from src.dss.settings import get_settings
 
     settings = get_settings()
     candidates = (

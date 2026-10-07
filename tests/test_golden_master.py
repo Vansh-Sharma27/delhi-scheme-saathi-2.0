@@ -14,7 +14,7 @@ import copy
 import pytest
 
 from src.db.session_store import InMemorySessionStore
-from src.main import CHAT_SESSION_PREFIX
+from src.dss.settings import CHAT_SESSION_PREFIX
 from tests.golden.harness import (
     GOLDEN_DIR,
     ScenarioResult,

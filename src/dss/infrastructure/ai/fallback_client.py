@@ -12,7 +12,6 @@ from collections.abc import Awaitable, Callable
 from time import perf_counter
 from typing import Any, TypeVar
 
-from src.config import get_settings
 from src.dss.application.ports.llm import (
     LLMProvider as LLMProvider,
 )
@@ -22,6 +21,7 @@ from src.dss.application.ports.llm import (
 from src.dss.application.ports.llm import (
     TaskPriority as TaskPriority,
 )
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

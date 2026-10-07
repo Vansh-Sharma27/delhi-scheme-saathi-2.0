@@ -2,7 +2,7 @@
 
 import asyncpg
 
-from src.config import get_settings
+from src.dss.settings import get_settings
 
 _pool: asyncpg.Pool | None = None
 

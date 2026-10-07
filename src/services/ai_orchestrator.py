@@ -2,7 +2,6 @@
 
 import sys
 
-from src.config import get_settings
 from src.dss.application.conversation import ai_orchestrator as _implementation
 from src.dss.application.conversation.ai_orchestrator import AIExecutionPolicy as AIExecutionPolicy
 from src.dss.application.conversation.ai_orchestrator import AIOrchestrator as AIOrchestrator
@@ -15,6 +14,7 @@ from src.dss.application.conversation.ai_orchestrator import (
     get_ai_orchestrator as get_ai_orchestrator,
 )
 from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient, get_llm_client
+from src.dss.settings import get_settings
 
 _implementation.get_settings = get_settings
 _implementation.get_llm_client = get_llm_client

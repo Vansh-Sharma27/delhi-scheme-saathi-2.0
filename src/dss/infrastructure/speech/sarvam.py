@@ -17,13 +17,13 @@ import logging
 
 import httpx
 
-from src.config import get_settings
 from src.dss.application.ports.speech import (
     STTResult as STTResult,
 )
 from src.dss.application.ports.speech import (
     TTSResult as TTSResult,
 )
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

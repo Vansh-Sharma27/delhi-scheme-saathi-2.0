@@ -4,7 +4,6 @@ import json
 
 import pytest
 
-from src.config import get_settings
 from src.dss.infrastructure.ai import (
     bedrock_client,
     grok_client,
@@ -13,6 +12,7 @@ from src.dss.infrastructure.ai import (
     fallback_client as llm_fallback_client,
 )
 from src.dss.infrastructure.embeddings import fallback_client, jina_client
+from src.dss.settings import get_settings
 from src.integrations import embedding_client, llm_client
 from src.models.session import UserProfile
 from src.prompts.loader import get_analysis_system_prompt, get_system_prompt

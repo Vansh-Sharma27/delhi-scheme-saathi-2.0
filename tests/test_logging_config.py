@@ -141,7 +141,7 @@ def test_secret_values_picks_up_configured_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The filter must read real settings, not just whatever tests inject."""
-    from src.config import get_settings
+    from src.dss.settings import get_settings
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", FAKE_BOT_TOKEN)
     get_settings.cache_clear()
@@ -159,7 +159,7 @@ def test_secret_values_picks_up_configured_credentials(
 
 def test_secret_values_ignores_short_values(monkeypatch: pytest.MonkeyPatch) -> None:
     """Short keys would match ordinary words and corrupt unrelated lines."""
-    from src.config import get_settings
+    from src.dss.settings import get_settings
 
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "abc")
     get_settings.cache_clear()

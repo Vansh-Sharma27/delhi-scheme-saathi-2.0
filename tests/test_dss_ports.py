@@ -33,7 +33,6 @@ from typing import Any
 
 import pytest
 
-from src.config import get_settings
 from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.document_repository import DocumentRepository
@@ -64,6 +63,7 @@ from src.dss.application.ports.work_queue import (
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
+from src.dss.settings import get_settings
 from src.integrations.llm_client import FallbackLLMClient
 from src.integrations.telegram import TelegramClient
 from src.models.rejection_rule import RejectionRule

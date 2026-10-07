@@ -17,7 +17,6 @@ import logging
 from contextlib import suppress
 from datetime import UTC, datetime
 
-from src.config import get_settings
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.work_queue import (
     AIWorkItem as AIWorkItem,
@@ -41,6 +40,7 @@ from src.dss.infrastructure.queues.work_queue import (
     serialize_work_item as serialize_work_item,
 )
 from src.dss.infrastructure.sessions.session_store import get_session_store
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

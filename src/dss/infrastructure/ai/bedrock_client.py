@@ -19,8 +19,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.config import get_settings
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

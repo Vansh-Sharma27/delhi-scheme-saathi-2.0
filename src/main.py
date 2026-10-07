@@ -12,7 +12,6 @@ import asyncpg
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.config import get_settings
 from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
@@ -25,6 +24,7 @@ from src.dss.infrastructure.database.adapters import (
 )
 from src.dss.interfaces.api.routes import APIRoutes
 from src.dss.settings import CHAT_SESSION_PREFIX as CHAT_SESSION_PREFIX
+from src.dss.settings import get_settings
 from src.services import conversation as conversation
 from src.utils.logging_config import configure_logging
 from src.utils.validators import sanitize_input as sanitize_input

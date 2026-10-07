@@ -20,8 +20,8 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from src.config import get_settings
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

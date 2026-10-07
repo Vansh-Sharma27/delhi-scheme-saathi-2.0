@@ -5,7 +5,6 @@ from types import SimpleNamespace
 
 import asyncpg
 
-from src.config import get_settings
 from src.db.session_store import SessionStore
 from src.dss.application.conversation.commands import CommandHandler
 from src.dss.application.conversation.language_policy import LanguagePolicy
@@ -23,6 +22,7 @@ from src.dss.domain.conversations.session import Session
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt
+from src.dss.settings import get_settings
 from src.models.api import ChatRequest, ChatResponse
 from src.services import (
     fsm,

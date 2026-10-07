@@ -161,17 +161,8 @@ source_modules = ["src.dss.bootstrap", "src.dss"]
 # module which in turn imports `src.dss.*` also fails.
 forbidden_modules = ["src.**"]
 allow_indirect_imports = false
-# Phase 4 interim state: adapters relocated into src.dss.infrastructure still
-# read application settings through the legacy `src.config.get_settings()`
-# singletons (spec 4.6). Every other legacy import under src.dss remains a
-# violation: the entries below are the complete set of tolerated edges, listed
-# so that a reviewer sees each one and Phase 6 (which moves settings into
-# src.dss.settings and switches to constructor injection) deletes them. An
-# entry that stops matching any import in the graph fails the contract at
-# error level, so the list cannot outlive the edges it permits.
-ignore_imports = [
-    "src.dss.infrastructure.** -> src.config",
-]
+# Phase 6 settings migration: all adapters now read src.dss.settings directly.
+# No legacy settings exception remains; all four contracts still apply.
 unmatched_ignore_imports_alerting = "error"
 
 [[tool.importlinter.contracts]]

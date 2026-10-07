@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from src.config import get_settings
+from src.dss.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
