@@ -150,13 +150,14 @@ ignore_unimported_packages = true
 [[tool.importlinter.contracts]]
 name = "No new src.dss code imports legacy src.* wiring (Phase 1 scaffolding)"
 type = "forbidden"
-source_modules = ["src.dss.bootstrap", "src.dss"]
+source_modules = ["src.dss"]
 # `src.**` matches every module under `src` including `src.dss.*`; the
 # contract skips overlapping pairs (a source module is not forbidden from
 # importing itself or its own descendants), so self-imports inside `src.dss`
 # are unaffected. This closes the two blind spots the layers contract leaves:
 # `bootstrap` (top layer, nothing above it to re-enter) and the unlisted
-# container root `src.dss.__init__`. It is green today because both are empty.
+# container root `src.dss.__init__`. The ancestor includes bootstrap: listing
+# bootstrap separately would also forbid its legitimate canonical siblings.
 # Indirect imports are checked, so a `bootstrap` module that imports a legacy
 # module which in turn imports `src.dss.*` also fails.
 forbidden_modules = ["src.**"]
