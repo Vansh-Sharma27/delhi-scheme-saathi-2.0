@@ -24,6 +24,7 @@ from src.dss.infrastructure.database.adapters import (
     PostgresSchemeRepository,
 )
 from src.dss.interfaces.api.routes import APIRoutes
+from src.dss.settings import CHAT_SESSION_PREFIX as CHAT_SESSION_PREFIX
 from src.services import conversation as conversation
 from src.utils.logging_config import configure_logging
 from src.utils.validators import sanitize_input as sanitize_input
@@ -36,12 +37,6 @@ logger = logging.getLogger(__name__)
 
 # Database connection pool (initialized on startup)
 db_pool: asyncpg.Pool | None = None
-
-# Sessions opened through /api/chat live in their own keyspace. Telegram keys
-# sessions by numeric user ID, and /api/chat takes that ID from an
-# unauthenticated request body, so sharing the keyspace would let any caller
-# read and continue a real user's conversation.
-CHAT_SESSION_PREFIX = "api:"
 
 
 async def init_db_pool() -> asyncpg.Pool:

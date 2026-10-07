@@ -42,7 +42,8 @@ from src.dss.domain.conversations.session import Session
 # CHAT_SESSION_PREFIX and the store-selection rule are imported rather than
 # redeclared: they must match the running application exactly, or this script
 # reads the wrong place and reports a session as missing when it is not.
-from src.main import CHAT_SESSION_PREFIX, _configure_session_store
+from src.dss.settings import CHAT_SESSION_PREFIX
+from src.main import _configure_session_store
 
 IN_MEMORY_HELP = """\
 The configured session store is in-memory, which is per-process: sessions live

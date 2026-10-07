@@ -216,10 +216,19 @@ async def test_configure_ai_background_runtime_skips_worker_for_external_queue()
 
 
 @pytest.mark.asyncio
-async def test_chat_endpoint_namespaces_caller_supplied_user_id() -> None:
-    """A Telegram user's numeric ID must not address their real session."""
+@pytest.mark.parametrize(
+    ("user_id", "expected"),
+    [
+        ("780045592", "api:780045592"),
+        ("api:780045592", "api:api:780045592"),
+        ("x" * 80, "api:" + "x" * 64),
+    ],
+)
+async def test_chat_endpoint_namespaces_caller_supplied_user_id(
+    user_id: str, expected: str
+) -> None:
+    """Always prefix after truncation, including already-prefixed caller IDs."""
     captured: dict[str, str] = {}
-    telegram_user_id = "780045592"
 
     with patch.object(main_module, "get_db_pool", lambda: object()), patch.object(
         main_module, "get_settings", lambda: SimpleNamespace(chat_api_key="")
@@ -227,11 +236,11 @@ async def test_chat_endpoint_namespaces_caller_supplied_user_id() -> None:
         "src.services.conversation.ConversationService", _capturing_service(captured)
     ):
         await main_module.chat_endpoint(
-            {"user_id": telegram_user_id, "message": "Namaste"}, _FakeRequest()
+            {"user_id": user_id, "message": "Namaste"}, _FakeRequest()
         )
 
-    assert captured["user_id"] != telegram_user_id
-    assert captured["user_id"] == f"{main_module.CHAT_SESSION_PREFIX}{telegram_user_id}"
+    assert captured["user_id"] != user_id
+    assert captured["user_id"] == expected
 
 
 @pytest.mark.asyncio
