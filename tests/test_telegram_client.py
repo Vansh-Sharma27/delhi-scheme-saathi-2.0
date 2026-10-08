@@ -1,11 +1,11 @@
 """Tests for Telegram Bot API client helpers."""
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from src.integrations.telegram import DEFAULT_BOT_COMMANDS, TelegramClient
+from src.dss.infrastructure.telegram import DEFAULT_BOT_COMMANDS, TelegramClient
+from src.dss.settings import Settings
 
 
 class _FakeResponse:
@@ -25,11 +25,7 @@ class _FakeResponse:
 @pytest.mark.asyncio
 async def test_set_my_commands_posts_default_commands() -> None:
     """Default Telegram commands should be posted to setMyCommands."""
-    with patch(
-        "src.integrations.telegram.get_settings",
-        return_value=SimpleNamespace(telegram_bot_token="test-token"),
-    ):
-        client = TelegramClient()
+    client = TelegramClient(Settings(_env_file=None, telegram_bot_token="test-token"))
 
     real_http_client = client._client
     mock_http_client = AsyncMock()
@@ -49,11 +45,7 @@ async def test_set_my_commands_posts_default_commands() -> None:
 @pytest.mark.asyncio
 async def test_get_my_commands_uses_telegram_endpoint() -> None:
     """Fetching registered Telegram commands should hit getMyCommands."""
-    with patch(
-        "src.integrations.telegram.get_settings",
-        return_value=SimpleNamespace(telegram_bot_token="test-token"),
-    ):
-        client = TelegramClient()
+    client = TelegramClient(Settings(_env_file=None, telegram_bot_token="test-token"))
 
     real_http_client = client._client
     mock_http_client = AsyncMock()
