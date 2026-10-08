@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-import asyncpg
-
+from src.dss.application.matching import scheme_relevance
+from src.dss.application.ports.ai_tasks import AITasks
+from src.dss.application.ports.matching import MatchSchemes
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 from src.dss.domain.profiles.profile import UserProfile
@@ -33,33 +34,27 @@ class MatchingUseCase:
 
     def __init__(
         self,
-        pool: asyncpg.Pool,
-        ai: Any,
+        ai: AITasks,
         *,
-        match_schemes: Callable[..., Awaitable[list[SchemeMatch]]],
+        match_schemes: MatchSchemes,
         is_low_context: Callable[[Session, str], bool],
         build_focus: Callable[[UserProfile, str], str],
-        get_history: Callable[..., list[dict[str, Any]]],
-        build_candidate_payload: Callable[[list[SchemeMatch]], list[dict[str, Any]]],
-        apply_relevance: Callable[..., dict[str, Any]],
+        get_history: Callable[[Session], list[dict[str, str]]],
         build_scheme_list: Callable[[list[SchemeMatch], UserProfile, str], str],
         generate_no_schemes: Callable[[str], str],
         collection_state: Callable[[UserProfile], ConversationState],
-        format_keyboard: Callable[..., list[list[dict[str, str]]] | None],
+        format_keyboard: Callable[[list[SchemeMatch], str], list[list[dict[str, str]]] | None],
         store_presented: Callable[[Session, list[SchemeMatch]], Session],
         set_awaiting_profile_change: Callable[[Session, bool], Session],
         clear_selection: Callable[[Session], Session],
-        set_presented_schemes: Callable[[Session, Any], Session],
+        set_presented_schemes: Callable[[Session, list[dict[str, str]]], Session],
         set_currently_asking: Callable[[Session, str | None], Session],
     ) -> None:
-        self.pool = pool
         self.ai = ai
         self.match_schemes = match_schemes
         self.is_low_context = is_low_context
         self.build_focus = build_focus
         self.get_history = get_history
-        self.build_candidate_payload = build_candidate_payload
-        self.apply_relevance = apply_relevance
         self.build_scheme_list = build_scheme_list
         self.generate_no_schemes = generate_no_schemes
         self.collection_state = collection_state
@@ -92,7 +87,6 @@ class MatchingUseCase:
             self.build_focus(profile, user_message) if low_context_turn else user_message
         )
         schemes = await self.match_schemes(
-            pool=self.pool,
             profile=profile,
             query_text=matching_query_text,
         )
@@ -142,7 +136,7 @@ class MatchingUseCase:
                     session=session,
                     user_message=self.build_focus(profile, user_message),
                     conversation_history=self.get_history(session),
-                    candidate_schemes=self.build_candidate_payload(schemes),
+                    candidate_schemes=scheme_relevance.build_candidate_payload(schemes),
                     session_language=lang,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -158,7 +152,7 @@ class MatchingUseCase:
                 schemes[0].deterministic_score,
             )
 
-        relevance = self.apply_relevance(
+        relevance = scheme_relevance.apply_relevance_judgement(
             schemes,
             judgement,
             lang,

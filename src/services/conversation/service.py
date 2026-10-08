@@ -26,7 +26,6 @@ from src.dss.application.conversation.transition_policy import TransitionPolicy
 from src.dss.application.conversation.turn_analyzer import TurnAnalyzer
 from src.dss.application.conversation.turn_renderer import TurnRenderer
 from src.dss.application.conversation.validators import sanitize_input as sanitize_input
-from src.dss.application.matching import scheme_relevance
 from src.dss.application.matching.matching_use_case import MatchingUseCase
 from src.dss.application.ports.clock import Clock
 from src.dss.domain.conversations.session import Session
@@ -75,14 +74,11 @@ class ConversationService:
         # Keep the raw client reachable for existing tests and narrow mocks.
         self.llm = self.ai.llm_client
         self.matching = MatchingUseCase(
-            self.pool,
             self.ai,
             match_schemes=self._match_schemes,
             is_low_context=turn_policy.is_low_context_matching_turn,
             build_focus=turn_policy.build_matching_focus_text,
             get_history=session_manager.get_conversation_history,
-            build_candidate_payload=scheme_relevance.build_candidate_payload,
-            apply_relevance=scheme_relevance.apply_relevance_judgement,
             build_scheme_list=views.build_scheme_list_text,
             generate_no_schemes=response_generator.generate_no_schemes_response,
             collection_state=turn_policy.collection_state_for_profile,
@@ -174,13 +170,12 @@ class ConversationService:
     async def _match_schemes(
         self,
         *,
-        pool: asyncpg.Pool,
         profile: UserProfile,
         query_text: str | None,
     ) -> list[SchemeMatch]:
         """Keep the legacy patch point live while matching moves to application."""
         return await scheme_matcher.match_schemes(
-            pool=pool,
+            pool=self.pool,
             profile=profile,
             query_text=query_text,
         )
