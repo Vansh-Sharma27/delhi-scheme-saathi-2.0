@@ -11,17 +11,21 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-from src.dss.application.guidance import presenters
+from src.dss.application.guidance import presenters, scheme_terms
 from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.bootstrap import api, lambda_api
-from src.dss.domain.eligibility.presentation_facts import EligibilityFacts
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
+from src.dss.domain.eligibility.presentation_facts import (
+    EligibilityFacts,
+    _infer_income_segment,
+    eligibility_facts,
+)
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme
 from src.dss.interfaces.api.dependencies import APIDependencies
 from src.dss.interfaces.api.http import HTTPRoutes
 from src.dss.interfaces.telegram.dispatch import TelegramHandler
 from src.dss.settings import Settings
-from src.services import response_generator
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,19 +83,32 @@ def test_grounded_presenters_match_original_responses(language: str) -> None:
     for eligibility in criteria:
         scheme = _scheme(eligibility)
         for profile in profiles:
-            for name, question in [
-                ("_maybe_generate_eligibility_response", "Am I eligible?"),
-                ("_maybe_generate_eligibility_response", "What documents do I need?"),
-                ("_maybe_generate_scheme_justification_response", "Why this scheme?"),
-                ("_maybe_generate_scheme_justification_response", "Hello"),
-                ("_maybe_generate_scheme_term_response", "What is the LIG income band?"),
-                ("_maybe_generate_scheme_term_response", "Hello"),
-            ]:
-                args = scheme, profile, question, language
-                assert getattr(response_generator, name)(*args) == getattr(original, name)(*args)
-            assert response_generator._build_matching_reason_context(scheme, profile) == (
-                original._build_matching_reason_context(scheme, profile)
+            reasons = presenters._build_matching_reason_context(
+                scheme, profile, calculate_eligibility_match(scheme, profile)
             )
+            for presenter, kwargs, questions in [
+                (
+                    presenters._maybe_generate_eligibility_response,
+                    {"facts": eligibility_facts(scheme, profile)},
+                    ["Am I eligible?", "What documents do I need?"],
+                ),
+                (
+                    presenters._maybe_generate_scheme_justification_response,
+                    {"reasons": reasons},
+                    ["Why this scheme?", "Hello"],
+                ),
+                (
+                    scheme_terms._maybe_generate_scheme_term_response,
+                    {"income_segment": _infer_income_segment(
+                        eligibility.income_by_category, profile.annual_income
+                    )},
+                    ["What is the LIG income band?", "Hello"],
+                ),
+            ]:
+                for question in questions:
+                    args = scheme, profile, question, language
+                    assert presenter(*args, **kwargs) == getattr(original, presenter.__name__)(*args)
+            assert reasons == original._build_matching_reason_context(scheme, profile)
 
 
 def test_presenter_uses_supplied_facts_instead_of_evaluating_profile() -> None:

@@ -8,6 +8,8 @@ Usage: python -m scripts.test_conversation_flow
 import asyncio
 import os
 import sys
+from contextlib import AsyncExitStack
+from functools import partial
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,30 +35,80 @@ async def main():
         print("⚠️  DATABASE_URL not set - using default localhost")
 
     # Import after env is loaded
-    from src.db.connection import close_pool, init_pool
-    from src.db.session_store import InMemorySessionStore, configure_session_store
-    from src.models.api import ChatRequest
-    from src.services.conversation import ConversationService
+    from src.dss.application.conversation import sessions
+    from src.dss.application.conversation.background_memory import MemoryJobs
+    from src.dss.application.conversation.contracts import ChatRequest
+    from src.dss.application.conversation.profile_fields import ProfileFields
+    from src.dss.application.conversation.views import SchemeViews
+    from src.dss.application.guidance.documents import resolve_documents_for_scheme
+    from src.dss.application.guidance.service import Guidance
+    from src.dss.application.matching.scheme_matcher import SchemeMatcher
+    from src.dss.bootstrap.conversation import build_conversation
+    from src.dss.bootstrap.runtime import build_ai, open_pool
+    from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
+    from src.dss.infrastructure.ai.prompts.loader import (
+        get_analysis_system_prompt,
+        get_generate_response_prompt,
+    )
+    from src.dss.infrastructure.database.adapters import (
+        PostgresDocumentRepository,
+        PostgresOfficeRepository,
+        PostgresRejectionRuleRepository,
+        PostgresSchemeRepository,
+    )
+    from src.dss.infrastructure.database.catalog import _load_catalog, get_canonical_life_events
+    from src.dss.infrastructure.embeddings.fallback_client import (
+        EMBEDDING_DIM,
+        FallbackEmbeddingClient,
+    )
+    from src.dss.infrastructure.sessions.clock import SystemClock
+    from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
+    from src.dss.settings import Settings
 
-    # Use in-memory session store
-    configure_session_store(InMemorySessionStore())
+    settings = Settings()
 
     # Initialize database
     try:
-        pool = await init_pool()
-        print("✅ Database connected")
+        pool = await open_pool(settings)
     except Exception as e:
         print(f"❌ Database connection failed: {e}")
         print("   Make sure PostgreSQL is running with the scheme data")
         return
 
-    # Create conversation service
-    conversation = ConversationService(pool)
-    user_id = "cli-test-user"
-
-    print("\n🤖 Bot: Ready! Type 'Namaste' to start.\n")
-
+    cleanup = AsyncExitStack()
+    cleanup.push_async_callback(pool.close)
     try:
+        print("✅ Database connected")
+        clock = SystemClock()
+        store = InMemorySessionStore(clock=clock)
+        llm = FallbackLLMClient(settings)
+        cleanup.push_async_callback(llm.close)
+        embeddings = FallbackEmbeddingClient(settings)
+        cleanup.push_async_callback(embeddings.close)
+        ai = build_ai(settings, llm)
+        # ponytail: the interactive CLI has no background queue or worker.
+        memory = MemoryJobs(store, ai, clock, queue=None)
+        responses = Guidance(
+            ai, get_prompt=get_generate_response_prompt, safe_generation=llm._safe_generation_text,
+        )
+        schemes = PostgresSchemeRepository(pool)
+        documents = PostgresDocumentRepository(pool)
+        views = SchemeViews(
+            schemes, PostgresOfficeRepository(pool), PostgresRejectionRuleRepository(pool),
+            responses, partial(resolve_documents_for_scheme, documents),
+        )
+        matcher = SchemeMatcher(
+            schemes, embeddings, get_canonical_life_events, embedding_dimension=EMBEDDING_DIM,
+        )
+        conversation = build_conversation(
+            settings=settings, store=store, clock=clock, ai=ai, responses=responses,
+            fields=ProfileFields(lambda: _load_catalog().values()), views=views,
+            match_schemes=matcher.match_schemes, get_analysis_prompt=get_analysis_system_prompt,
+            enqueue=memory.enqueue,
+        )
+        user_id = "cli-test-user"
+        print("\n🤖 Bot: Ready! Type 'Namaste' to start.\n")
+
         while True:
             try:
                 user_input = input("👤 You: ").strip()
@@ -72,14 +124,12 @@ async def main():
                 break
 
             if user_input.lower() == "/reset":
-                from src.services import session_manager
-                await session_manager.delete_session(user_id)
+                await sessions.delete_session(user_id, store=store)
                 print("🔄 Session reset. Type 'Namaste' to start fresh.\n")
                 continue
 
             if user_input.lower() == "/profile":
-                from src.services import session_manager
-                session = await session_manager.get_or_create_session(user_id)
+                session = await sessions.get_or_create_session(user_id, store=store, clock=clock)
                 profile = session.user_profile
                 print("📋 Current Profile:")
                 print(f"   State: {session.state.value}")
@@ -122,7 +172,7 @@ async def main():
                 print(f"\n❌ Error: {e}\n")
 
     finally:
-        await close_pool()
+        await cleanup.aclose()
         print("\n👋 Session ended.")
 
 

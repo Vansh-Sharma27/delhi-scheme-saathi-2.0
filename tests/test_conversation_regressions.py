@@ -16,7 +16,6 @@ from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.document import Document, DocumentChain
 from src.dss.domain.schemes.rejection_rule import RejectionRule
 from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.services import response_generator
 from tests.conversation_fakes import ConversationFixture
 
 ACTIVE_SCHEME_SEEDS = [
@@ -2213,7 +2212,7 @@ async def test_unlocked_hinglish_field_style_reply_preserves_language_for_matchi
 
 
 @pytest.mark.asyncio
-async def test_scheme_question_response_includes_last_assistant_answer_for_translation() -> None:
+async def test_scheme_question_response_includes_last_assistant_answer_for_translation(graph) -> None:
     """Scheme Q&A context should include the previous assistant reply for translation requests."""
     session = Session(
         user_id="user-response-translation-context",
@@ -2241,11 +2240,11 @@ async def test_scheme_question_response_includes_last_assistant_answer_for_trans
         categories=["EWS", "LIG", "MIG"],
     )
 
-    with patch(
-        "src.services.response_generator.generate_response",
+    with patch.object(
+        graph.responses, "generate_response",
         AsyncMock(return_value="अनुवादित उत्तर"),
     ) as generate_mock:
-        result = await response_generator.generate_scheme_question_response(
+        result = await graph.responses.generate_scheme_question_response(
             session,
             scheme,
             session.user_profile,
@@ -2259,7 +2258,7 @@ async def test_scheme_question_response_includes_last_assistant_answer_for_trans
 
 
 @pytest.mark.asyncio
-async def test_scheme_question_response_answers_justification_deterministically() -> None:
+async def test_scheme_question_response_answers_justification_deterministically(graph) -> None:
     """Why-this-scheme answers should use grounded deterministic reasons instead of the LLM."""
     session = Session(
         user_id="user-grounded-reasons",
@@ -2295,11 +2294,11 @@ async def test_scheme_question_response_answers_justification_deterministically(
         offline_process="Visit the district office",
     )
 
-    with patch(
-        "src.services.response_generator.generate_response",
+    with patch.object(
+        graph.responses, "generate_response",
         AsyncMock(return_value="LLM fallback should not be used"),
     ) as generate_mock:
-        result = await response_generator.generate_scheme_question_response(
+        result = await graph.responses.generate_scheme_question_response(
             session,
             scheme,
             session.user_profile,
@@ -2314,7 +2313,7 @@ async def test_scheme_question_response_answers_justification_deterministically(
 
 
 @pytest.mark.asyncio
-async def test_scheme_question_response_answers_eligibility_deterministically() -> None:
+async def test_scheme_question_response_answers_eligibility_deterministically(graph) -> None:
     """Eligibility questions should use grounded deterministic text instead of the LLM."""
     session = Session(
         user_id="user-deterministic-eligibility-answer",
@@ -2352,11 +2351,11 @@ async def test_scheme_question_response_answers_eligibility_deterministically() 
         offline_process="Apply online",
     )
 
-    with patch(
-        "src.services.response_generator.generate_response",
+    with patch.object(
+        graph.responses, "generate_response",
         AsyncMock(return_value="LLM fallback should not be used"),
     ) as generate_mock:
-        result = await response_generator.generate_scheme_question_response(
+        result = await graph.responses.generate_scheme_question_response(
             session,
             scheme,
             session.user_profile,
