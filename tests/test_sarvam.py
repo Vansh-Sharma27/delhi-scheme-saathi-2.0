@@ -5,10 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.integrations.sarvam import (
+from src.dss.application.ports.speech import STTResult, TTSResult
+from src.dss.infrastructure.speech.sarvam import (
     SarvamClient,
-    STTResult,
-    TTSResult,
     configure_sarvam_client,
     get_sarvam_client,
 )

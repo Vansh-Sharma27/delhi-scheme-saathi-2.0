@@ -12,25 +12,24 @@ from src.dss.infrastructure.ai import (
     grok_client,
 )
 from src.dss.infrastructure.ai import (
-    fallback_client as llm_fallback_client,
+    fallback_client as llm_client,
 )
-from src.dss.infrastructure.embeddings import fallback_client, jina_client
+from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt, get_system_prompt
+from src.dss.infrastructure.embeddings import (
+    fallback_client as embedding_client,
+)
+from src.dss.infrastructure.embeddings import jina_client
 from src.dss.settings import get_settings
-from src.integrations import embedding_client, llm_client
 from src.models.session import UserProfile
-from src.prompts.loader import get_analysis_system_prompt, get_system_prompt
 
 
 @pytest.fixture(autouse=True)
 def _reset_singletons() -> None:
-    """Reset cached/singleton state between tests.
-
-    The adapter singletons moved to the canonical Phase 3 modules, so the resets target those modules. `llm_client` and `embedding_client` stay imported for the re-exported class names the tests below use.
-    """
+    """Reset cached/singleton state in the canonical adapter modules between tests."""
     get_settings.cache_clear()
-    llm_fallback_client._llm_client = None
+    llm_client._llm_client = None
     jina_client._jina_client = None
-    fallback_client._embedding_client = None
+    embedding_client._embedding_client = None
 
 
 @pytest.mark.asyncio
@@ -252,7 +251,7 @@ async def test_matcher_skips_vector_ranking_on_failed_embedding() -> None:
     repository.retrieve_candidates.side_effect = fake_hybrid_search
     matcher = SchemeMatcher(
         repository, FailedEmbeddingClient(), lambda sid: [],
-        embedding_dimension=fallback_client.EMBEDDING_DIM,
+        embedding_dimension=embedding_client.EMBEDDING_DIM,
     )
 
     profile = UserProfile(life_event="HOUSING")

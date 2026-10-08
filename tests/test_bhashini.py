@@ -5,10 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.integrations.bhashini import (
+from src.dss.application.ports.speech import STTResult, TTSResult
+from src.dss.infrastructure.speech.bhashini import (
     BhashiniClient,
-    STTResult,
-    TTSResult,
     configure_bhashini_client,
     get_bhashini_client,
 )

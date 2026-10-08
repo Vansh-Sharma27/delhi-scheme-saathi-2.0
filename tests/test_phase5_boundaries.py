@@ -43,6 +43,14 @@ def _original_responses() -> ModuleType:
         node for node in tree.body
         if not (isinstance(node, ast.ImportFrom) and node.module == "src.services.ai_orchestrator")
     ]
+    # Remap historical import locations only; preserve the oracle's function bodies.
+    imports = {
+        "src.integrations.llm_client": "src.dss.infrastructure.ai.fallback_client",
+        "src.prompts.loader": "src.dss.infrastructure.ai.prompts.loader",
+    }
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            node.module = imports.get(node.module, node.module)
     exec(compile(tree, "<original-responses>", "exec"), module.__dict__)
     return module
 

@@ -1,5 +1,6 @@
 """Port-driven matching agrees with a frozen, independent historical matcher."""
 
+import ast
 import subprocess
 from pathlib import Path
 from types import ModuleType
@@ -24,7 +25,12 @@ def legacy() -> ModuleType:
         encoding="utf-8",
     )
     module = ModuleType("historical_scheme_matcher")
-    exec(compile(source, source_ref, "exec"), module.__dict__)
+    tree = ast.parse(source)
+    # Remap imports only; the historical matching implementation stays independent.
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "src.integrations.embedding_client":
+            node.module = "src.dss.infrastructure.embeddings.fallback_client"
+    exec(compile(tree, source_ref, "exec"), module.__dict__)
     return module
 
 

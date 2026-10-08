@@ -38,13 +38,13 @@ async def test_voice_connection():
     if sarvam_key:
         print(f"\n[OK] SARVAM_API_KEY configured (length: {len(sarvam_key)})")
         print("     Using Sarvam AI for voice services")
-        from src.integrations.sarvam import configure_sarvam_client
+        from src.dss.infrastructure.speech.sarvam import configure_sarvam_client
         client = configure_sarvam_client(api_key=sarvam_key)
         provider = "Sarvam AI"
     elif bhashini_key:
         print(f"\n[OK] BHASHINI_API_KEY configured (length: {len(bhashini_key)})")
         print("     Using Bhashini for voice services")
-        from src.integrations.bhashini import configure_bhashini_client
+        from src.dss.infrastructure.speech.bhashini import configure_bhashini_client
         client = configure_bhashini_client(api_key=bhashini_key)
         provider = "Bhashini"
     else:
