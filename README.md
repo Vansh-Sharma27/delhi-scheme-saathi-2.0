@@ -37,20 +37,14 @@ In Telegram, try `/help` first. The bot now also exposes `/start`, `/help`, and 
 ```
 delhi-scheme-saathi-2.0/
 ├── src/
-│   ├── dss/
-│   │   ├── domain/         # Profiles, schemes, conversations, eligibility
-│   │   ├── application/    # Conversation, matching, guidance, AI policy; shared ports
-│   │   ├── infrastructure/ # Database, sessions, queues, AI, embeddings, speech
-│   │   ├── interfaces/     # HTTP routes and Telegram text/voice handling
-│   │   └── bootstrap/      # Composition root awaits Phase 6
-│   ├── models/             # Application DTO and domain compatibility paths
-│   ├── db/                 # Pool lifecycle and repository compatibility paths
-│   ├── services/           # Compatibility services and provider-facing helpers
-│   ├── integrations/       # Provider compatibility paths and Telegram client
-│   ├── prompts/            # Legacy loader; templates live under infrastructure/ai
-│   ├── utils/              # Validators, keyboards, logging, catalog facade
-│   ├── webhook/            # Telegram webhook handler
-│   └── main.py             # Current FastAPI entrypoint and wiring
+│   └── dss/
+│       ├── domain/         # Profiles, schemes, conversations, eligibility
+│       ├── application/    # Conversation, matching, guidance, AI policy; shared ports
+│       ├── infrastructure/ # Database, sessions, queues, AI, embeddings, speech
+│       ├── interfaces/     # HTTP routes and Telegram text/voice handling
+│       ├── bootstrap/      # Composition root and four-surface resource ownership
+│       ├── observability/  # Usage telemetry and credential redaction
+│       └── settings.py     # Shared settings and unchanged defaults
 ├── data/                # Seed data (schemes, documents, offices)
 ├── scripts/             # Database seeding and utilities
 ├── tests/               # Unit and integration tests
@@ -92,6 +86,14 @@ docker exec -it dss-app python3 scripts/generate_embeddings.py
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed setup instructions.
 
+To run the canonical app directly in Bash from the repository root with dependencies installed and the Compose database running:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5434/delhi_scheme_saathi uvicorn src.dss.bootstrap.api:app --host 0.0.0.0 --port 8000
+```
+
+Stop the Compose app first (`docker compose stop app`) if it is using port 8000. The container launcher uses the same app target after its seed-data check.
+
 ## API Endpoints
 
 | Endpoint | Description |
@@ -126,7 +128,7 @@ views — `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS` and
 
 Scheme matching retrieves SQL-filtered candidates in vector-similarity order, or benefit-amount order when embeddings are unavailable. It then evaluates eligibility, filters topic mismatches, drops candidates with any failing field, ranks, and truncates. The evaluator checks age, gender, caste category, and income/income segments; other stored criteria are not evaluated yet.
 
-Phase 4 domain extraction is implemented and verified locally. Application services, interfaces, and final composition wiring are still pending Phases 5 and 6. Legacy compatibility paths remain until Phase 6; remote Phase 4 review and merge are pending.
+Phases 4 and 5 are merged. Phase 6 composition-root work is implemented and verified on Hostinger but unpublished pending review; legacy facades are removed. The diagrams retain historical pre-Phase-6 topology and labels; use the architecture guide's current paths and lifecycle ownership where they differ. Hostinger checks: 560 tests passed, 4 import contracts passed, and mypy 66 baseline diagnostics / 41 current diagnostics with no new fingerprints. The built container and installed wheel pass asset/entrypoint checks; PostgreSQL/pgvector and emulated DynamoDB/SQS integration tests pass. Live AWS and Telegram deployment remains outside this verification.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, and
 [docs/adr/](docs/adr/README.md) for the decisions behind it — what was chosen,
@@ -213,7 +215,7 @@ in `.env` alone has no effect on those deployments. Wire them into whichever
 deployment path you use before exposing the service publicly.
 
 Configured credentials are stripped from log output by
-`src/utils/logging_config.py` before any handler emits a record. This matters
+`src/dss/observability/logging_config.py` before any handler emits a record. This matters
 because the Telegram bot token is part of every Telegram request URL, and httpx
 includes that URL in the exceptions the webhook handler logs.
 

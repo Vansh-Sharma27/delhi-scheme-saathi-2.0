@@ -125,20 +125,11 @@ containers = ["src.dss"]
 #  - This contract walks downstream through non-layer modules. A `src.dss`
 #    module importing a legacy `src.*` module whose dependency closure re-enters
 #    `src.dss` at a layer STRICTLY ABOVE the importer fails the contract with
-#    the full chain in the message. Today the facade at
-#    `src.models.rejection_rule` -> `src.dss.domain.schemes.rejection_rule`
-#    creates one such re-entry edge, so any importer below `domain` that
-#    touches `src.main` (which imports `src.models.api` -> `src.models.rejection_rule`)
-#    already fails. Each facade added in Phases 2-4 plants a new re-entry edge,
-#    so the net widens each phase.
+#    the full chain in the message.
 #  - The remaining blind spots are `bootstrap` (the top layer, nothing above
 #    it) and the unlisted container root `src.dss.__init__`. Both are empty
 #    until Phase 6. The `forbidden` contract below closes `bootstrap` and the
 #    root against legacy `src.*` imports.
-#  - Phase 6 landmine (spec 7.7): `CHAT_SESSION_PREFIX` moves into
-#    `src/dss/settings.py`. A transient `from src.main import
-#    CHAT_SESSION_PREFIX` inside `src.dss.settings` fails this gate today
-#    (proven). The Phase 6 agent must copy the constant, never import it.
 #
 # Interfaces and application services still reach infrastructure during the
 # transition. Infrastructure imports domain values; eligibility evaluation
