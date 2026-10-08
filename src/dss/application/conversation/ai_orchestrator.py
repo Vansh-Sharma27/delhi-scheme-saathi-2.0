@@ -8,7 +8,6 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from time import perf_counter
 from typing import Any, TypeVar, cast
 
 from src.dss.application.conversation.memory import build_working_memory, working_memory_payload
@@ -111,29 +110,6 @@ class AIOrchestrator:
             self._usage_sink(event)
         log_llm_usage(event, logger)
 
-    def _get_instance_override(self, method_name: str) -> Callable[..., Any] | None:
-        """Return an instance-level monkeypatch for backward-compatible tests."""
-        return getattr(self.llm_client, "__dict__", {}).get(method_name)
-
-    async def _call_public_override(
-        self,
-        method_name: str,
-        **kwargs: Any,
-    ) -> ProviderExecutionResult[Any]:
-        """Execute an instance-level monkeypatched public LLM method."""
-        override = self._get_instance_override(method_name)
-        if override is None:
-            raise RuntimeError(f"No override found for {method_name}")
-
-        started = perf_counter()
-        output = await override(**kwargs)
-        return ProviderExecutionResult(
-            output=output,
-            provider=None,
-            fallback_used=False,
-            latency_ms=(perf_counter() - started) * 1000,
-        )
-
     async def _run_task(
         self,
         *,
@@ -207,31 +183,15 @@ class AIOrchestrator:
             task_type=AITaskType.ANALYZE_MESSAGE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "analyze_message",
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=user_profile,
-                        system_prompt=system_prompt,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("analyze_message") is not None
-                    else self.llm_client.analyze_message_with_meta(
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=user_profile,
-                        system_prompt=system_prompt,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.analyze_message_with_meta(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                current_state=session.state.value,
+                user_profile=user_profile,
+                system_prompt=system_prompt,
+                session_language=session_language,
+                working_memory=memory,
+                priority=cast(TaskPriority, priority),
             ),
             safe_output=lambda: self.safe_analysis(session_language),
         )
@@ -259,31 +219,15 @@ class AIOrchestrator:
             task_type=AITaskType.JUDGE_SCHEME_RELEVANCE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "judge_scheme_relevance",
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=session.user_profile.model_dump(),
-                        candidate_schemes=candidate_schemes,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("judge_scheme_relevance") is not None
-                    else self.llm_client.judge_scheme_relevance_with_meta(
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=session.user_profile.model_dump(),
-                        candidate_schemes=candidate_schemes,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.judge_scheme_relevance_with_meta(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                current_state=session.state.value,
+                user_profile=session.user_profile.model_dump(),
+                candidate_schemes=candidate_schemes,
+                session_language=session_language,
+                working_memory=memory,
+                priority=cast(TaskPriority, priority),
             ),
             safe_output=lambda: self.safe_relevance(candidate_schemes),
         )
@@ -312,23 +256,11 @@ class AIOrchestrator:
             task_type=AITaskType.GENERATE_RESPONSE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "generate_response",
-                        context=enriched_context,
-                        system_prompt=system_prompt,
-                        user_language=user_language,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("generate_response") is not None
-                    else self.llm_client.generate_response_with_meta(
-                        context=enriched_context,
-                        system_prompt=system_prompt,
-                        user_language=user_language,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.generate_response_with_meta(
+                context=enriched_context,
+                system_prompt=system_prompt,
+                user_language=user_language,
+                priority=cast(TaskPriority, priority),
             ),
             safe_output=lambda: self.safe_generation(user_language),
         )
@@ -353,21 +285,10 @@ class AIOrchestrator:
             session_id=session.user_id,
             prompt_chars=prompt_chars,
             queue_lag_ms=queue_lag_ms,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "summarize_conversation",
-                        messages=messages,
-                        current_summary=session.working_memory.summary,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("summarize_conversation") is not None
-                    else self.llm_client.summarize_conversation_with_meta(
-                        messages=messages,
-                        current_summary=session.working_memory.summary,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.summarize_conversation_with_meta(
+                messages=messages,
+                current_summary=session.working_memory.summary,
+                priority=cast(TaskPriority, priority),
             ),
             safe_output=lambda: session.working_memory.summary or "",
         )

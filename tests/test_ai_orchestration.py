@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.integrations.llm_client import ProviderExecutionResult
+from src.dss.application.ports.llm import LLMProvider, ProviderExecutionResult
 from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
 from src.models.session import ConversationMemory, Message, Session, UserProfile
 from src.services.ai_orchestrator import (
@@ -39,7 +39,7 @@ def _make_match(scheme_id: str, deterministic_score: float) -> SchemeMatch:
 @pytest.mark.asyncio
 async def test_generate_response_includes_working_memory_context() -> None:
     """Free-form response generation should inject working memory into the prompt context."""
-    fake_llm = AsyncMock()
+    fake_llm = AsyncMock(spec=LLMProvider)
     fake_llm.generate_response_with_meta = AsyncMock(
         return_value=ProviderExecutionResult(
             output="Generated response",
@@ -73,7 +73,7 @@ async def test_generate_response_includes_working_memory_context() -> None:
 @pytest.mark.asyncio
 async def test_refresh_working_memory_builds_summary_and_scheme_context() -> None:
     """Background memory refresh should combine LLM summary with deterministic facts."""
-    fake_llm = AsyncMock()
+    fake_llm = AsyncMock(spec=LLMProvider)
     fake_llm.summarize_conversation_with_meta = AsyncMock(
         return_value=ProviderExecutionResult(
             output="User wants housing support and needs the next eligibility step.",
@@ -104,7 +104,7 @@ async def test_refresh_working_memory_builds_summary_and_scheme_context() -> Non
 
 def test_should_run_relevance_judge_only_for_ambiguous_matches() -> None:
     """AI relevance judging should be reserved for ambiguous deterministic rankings."""
-    orchestrator = AIOrchestrator(llm_client=AsyncMock())
+    orchestrator = AIOrchestrator(llm_client=AsyncMock(spec=LLMProvider))
 
     assert orchestrator.should_run_relevance_judge(
         [_make_match("SCH-CLEAR", 0.97), _make_match("SCH-LOW", 0.60)]
@@ -117,19 +117,24 @@ def test_should_run_relevance_judge_only_for_ambiguous_matches() -> None:
 @pytest.mark.asyncio
 async def test_analyze_message_enforces_deadline_cancels_and_records_timeout() -> None:
     """A real expired deadline must cancel work and emit timeout telemetry."""
-    fake_llm = AsyncMock()
+    fake_llm = AsyncMock(spec=LLMProvider)
     cancelled = asyncio.Event()
     events: list[LLMUsageEvent] = []
 
-    async def slow_analysis(**_kwargs: object) -> dict[str, object]:
+    async def slow_analysis(**_kwargs: object) -> ProviderExecutionResult[dict[str, object]]:
         try:
             await asyncio.sleep(1)
         except asyncio.CancelledError:
             cancelled.set()
             raise
-        return {"intent": "should-not-complete"}
+        return ProviderExecutionResult(
+            output={"intent": "should-not-complete"},
+            provider=None,
+            fallback_used=False,
+            latency_ms=1000.0,
+        )
 
-    fake_llm.analyze_message = slow_analysis
+    fake_llm.analyze_message_with_meta = AsyncMock(side_effect=slow_analysis)
     orchestrator = AIOrchestrator(
         llm_client=fake_llm,
         policies={
@@ -156,3 +161,64 @@ async def test_analyze_message_enforces_deadline_cancels_and_records_timeout() -
     assert events[0].task_type == AITaskType.ANALYZE_MESSAGE.value
     assert events[0].error == "timeout"
     assert events[0].latency_ms == 10.0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("task", "provider_method", "kwargs", "payload", "priority"),
+    [
+        (
+            "analyze_message", "analyze_message",
+            {"user_message": "housing", "conversation_history": [],
+             "system_prompt": "test", "session_language": "en"},
+            {"intent": "question"}, "inline",
+        ),
+        (
+            "judge_scheme_relevance", "judge_scheme_relevance",
+            {"user_message": "housing", "conversation_history": [],
+             "candidate_schemes": [], "session_language": "en"},
+            {"overall_confidence": 0.5}, "inline",
+        ),
+        (
+            "generate_response", "generate_response",
+            {"context": {}, "system_prompt": "test", "user_language": "en"},
+            "Generated response", "inline",
+        ),
+        (
+            "refresh_working_memory", "summarize_conversation",
+            {"queue_lag_ms": 7.0}, "Housing summary", "background",
+        ),
+    ],
+)
+async def test_tasks_use_provider_metadata_despite_plain_method_override(
+    task, provider_method, kwargs, payload, priority,
+) -> None:
+    """All tasks use the metadata port even when a plain method exists on the instance."""
+    provider = AsyncMock(spec=LLMProvider)
+    plain = AsyncMock(side_effect=AssertionError("Plain provider method called"))
+    setattr(provider, provider_method, plain)
+    metadata = getattr(provider, f"{provider_method}_with_meta")
+    metadata.return_value = ProviderExecutionResult(
+        output=payload, provider="grok", fallback_used=True, latency_ms=12.34,
+        error="provider diagnostic",
+    )
+    events: list[LLMUsageEvent] = []
+    orchestrator = AIOrchestrator(llm_client=provider, usage_sink=events.append)
+    session = Session(
+        user_id="metadata-user", messages=[Message(role="user", content="housing")],
+    )
+
+    output = await getattr(orchestrator, task)(session=session, **kwargs)
+
+    assert (output.summary if isinstance(output, ConversationMemory) else output) == payload
+    plain.assert_not_awaited()
+    metadata.assert_awaited_once()
+    assert metadata.await_args.kwargs["priority"] == priority
+    assert len(events) == 1
+    assert events[0].task_type == task
+    assert events[0].session_id == session.user_id
+    assert events[0].provider == "grok"
+    assert events[0].fallback_used is True
+    assert events[0].latency_ms == 12.34
+    assert events[0].error == "provider diagnostic"
+    assert events[0].queue_lag_ms == kwargs.get("queue_lag_ms")
