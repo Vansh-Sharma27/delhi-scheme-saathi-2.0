@@ -10,9 +10,11 @@ from src.dss.application.conversation.background_memory import MemoryJobs
 from src.dss.application.ports.ai_tasks import AITasks
 from src.dss.application.ports.session_repository import SessionStore
 from src.dss.application.ports.work_queue import AIWorkQueue
+from src.dss.domain.conversations.session import ConversationMemory, Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.infrastructure.queues.work_queue import deserialize_work_item, serialize_work_item
 from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore, InMemorySessionStore
-from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
 
 
 class FixedClock:

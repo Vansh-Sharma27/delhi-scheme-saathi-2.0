@@ -50,7 +50,7 @@ async def get_rules_by_ids(
     """Get rejection rules by IDs, most severe first.
 
     Currently uncalled. Its counterpart is ``Scheme.rejection_rules``
-    (src/models/scheme.py), a list of rule IDs carried on every scheme row
+    (src/dss/domain/schemes/scheme.py), a list of rule IDs carried on every scheme row
     that nothing reads yet — fetching by those IDs is what this is for, and
     is cheaper than a second scheme-keyed query once a scheme is loaded.
 

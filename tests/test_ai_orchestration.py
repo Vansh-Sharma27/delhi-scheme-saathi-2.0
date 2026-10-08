@@ -12,10 +12,11 @@ from src.dss.application.conversation.ai_orchestrator import (
     LLMUsageEvent,
 )
 from src.dss.application.ports.llm import LLMProvider, ProviderExecutionResult
+from src.dss.domain.conversations.session import ConversationMemory, Message, Session
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeMatch
 from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.settings import Settings
-from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.models.session import ConversationMemory, Message, Session, UserProfile
 
 
 def _make_match(scheme_id: str, deterministic_score: float) -> SchemeMatch:

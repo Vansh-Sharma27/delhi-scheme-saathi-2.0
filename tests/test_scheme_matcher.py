@@ -7,11 +7,11 @@ import pytest
 from src.dss.application.matching.scheme_matcher import SchemeMatcher
 from src.dss.application.ports.embeddings import EmbeddingProvider
 from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate
 from src.dss.infrastructure.database import scheme_repo
 from src.dss.infrastructure.database.catalog import get_canonical_life_events
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM
-from src.models.session import UserProfile
 
 
 @pytest.fixture

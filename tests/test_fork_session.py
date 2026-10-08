@@ -8,9 +8,11 @@ import pytest
 
 from scripts import fork_session
 from src.dss.bootstrap.sessions import build_session_store
+from src.dss.domain.conversations.session import Message, Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
 from src.dss.settings import CHAT_SESSION_PREFIX
-from src.models.session import ConversationState, Message, Session, UserProfile
 
 
 def test_fork_shares_canonical_prefix_and_existing_store_wiring() -> None:

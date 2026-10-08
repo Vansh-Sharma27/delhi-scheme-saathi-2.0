@@ -64,6 +64,8 @@ from src.dss.application.ports.work_queue import (
     AIWorkQueue,
     AIWorkType,
 )
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.schemes.rejection_rule import RejectionRule
 from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore, InMemorySessionStore
@@ -71,8 +73,6 @@ from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
 from src.dss.infrastructure.telegram import TelegramClient
 from src.dss.settings import get_settings
-from src.models.rejection_rule import RejectionRule
-from src.models.session import Session
 
 
 def test_llm_port_conformance() -> None:
@@ -574,7 +574,7 @@ class InMemorySchemeRepository:
         query_embedding: list[float] | None = None,
         limit: int = 5,
     ) -> list[Any]:
-        from src.models.scheme import SchemeMatch
+        from src.dss.domain.schemes.scheme import SchemeMatch
 
         hits = self._schemes if life_event is None else [
             s for s in self._schemes if life_event in s.life_events
@@ -610,7 +610,7 @@ class InMemorySchemeRepository:
 def _scheme(
     sid: str, name: str, benefits_amount: int | None, life_events: list[str], active: bool = True
 ) -> Any:
-    from src.models.scheme import Scheme
+    from src.dss.domain.schemes.scheme import Scheme
 
     return Scheme(
         id=sid, name=name, name_hindi=name, department="d", department_hindi="ड",
@@ -694,7 +694,7 @@ class InMemoryDocumentRepository:
 
 
 def _document(doc_id: str, name: str, name_hindi: str = "ड") -> Any:
-    from src.models.document import Document
+    from src.dss.domain.schemes.document import Document
 
     return Document(
         id=doc_id, name=name, name_hindi=name_hindi, issuing_authority="UIDAI",
@@ -777,7 +777,7 @@ class InMemoryOfficeRepository:
 
 
 def _office(oid: str, district: str, services: list[str], otype: str = "CSC") -> Any:
-    from src.models.office import Office
+    from src.dss.domain.schemes.office import Office
 
     return Office(
         id=oid, name=oid, type=otype, address="addr", district=district, services=services,

@@ -7,6 +7,7 @@ import pytest
 
 from src.dss.application.matching.scheme_matcher import SchemeMatcher
 from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.infrastructure.ai import (
     bedrock_client,
     grok_client,
@@ -19,7 +20,6 @@ from src.dss.infrastructure.embeddings import (
     fallback_client as embedding_client,
 )
 from src.dss.settings import Settings
-from src.models.session import UserProfile
 
 
 @pytest.mark.asyncio
