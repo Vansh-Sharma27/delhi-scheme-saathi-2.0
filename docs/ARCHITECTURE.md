@@ -8,7 +8,7 @@ Delhi Scheme Saathi is a Python 3.11 FastAPI application for welfare-scheme guid
 
 ## Migration state
 
-Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5), with CI and CodeQL passing. Phase 5 application and interface extraction is implemented and its local verification gate is green. Conversation analysis, language selection and enforcement, profile updates, transition/reset decisions, turn/snapshot rendering, commands, persistence, compact memory, AI task policy, and matching orchestration have application implementations. Guidance is split into localization, templates, presenters, currency formatting, and generation. HTTP routes and Telegram handling live in `src/dss/interfaces`. The application service successor is below 300 physical lines and every new source file is at most 500 lines. Review, tagging, and merge remain pending; the phase is not formally closed until those steps are completed. Composition-root construction and facade removal belong to Phase 6.
+Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/5). Phase 5 application and interface extraction was merged in [PR #7](https://github.com/Vansh-Sharma27/delhi-scheme-saathi-2.0/pull/7). Phase 6 composition-root work is implemented on `arch/phase-6-composition-root` and remains unpublished pending review. Conversation analysis, language selection and enforcement, profile updates, transition/reset decisions, turn/snapshot rendering, commands, persistence, compact memory, AI task policy, and matching orchestration are application services. Guidance is split into localization, templates, presenters, currency formatting, and generation. HTTP and Telegram adapters live in `src/dss/interfaces`; construction and resource ownership live in `src/dss/bootstrap`.
 
 | Area | Current implementation |
 | --- | --- |
@@ -26,26 +26,26 @@ Phase 4 domain extraction was merged in [PR #5](https://github.com/Vansh-Sharma2
 | Localization, response templates, presenters, generation, currency formatting | `src/dss/application/guidance/` |
 | Presentation facts derived from the existing evaluator | `src/dss/domain/eligibility/presentation_facts.py` |
 | AI usage telemetry | `src/dss/observability/llm_usage.py` |
-| Conversation compatibility entrypoint and view/provider helpers | `src/services/conversation/`, `src/services/response_generator.py` |
+| Conversation application graph and shared views | `src/dss/application/conversation/`, `src/dss/application/guidance/` |
 | Matching application orchestration | `src/dss/application/matching/matching_use_case.py` |
 | FastAPI routes and Telegram handling | `src/dss/interfaces/api/routes.py`, `src/dss/interfaces/telegram/` |
-| Startup and interface compatibility wiring | `src/main.py`, `src/webhook/handler.py` |
-| Settings and credential redaction | `src/config.py`, `src/utils/logging_config.py` |
+| Startup, lifecycle ownership, and interface construction | `src/dss/bootstrap/` |
+| Settings and credential redaction | `src/dss/settings.py`, `src/dss/observability/` |
 
-Import-linter enforces four contracts: the six-module conversation order, the modular-monolith layer direction, the restriction on new `src.dss` imports of legacy wiring, and a prohibition on application/interface imports of infrastructure. The fourth contract checks direct and indirect imports. The remaining legacy exception permits infrastructure to read `src.config`. Type-checking imports are visible to the contracts.
+Import-linter enforces four contracts: the canonical conversation order, the modular-monolith layer direction, the prohibition on canonical imports of legacy wiring, and a prohibition on application/interface imports of infrastructure. The fourth contract checks direct and indirect imports. Type-checking imports are visible to the contracts.
 
 Domain code imports no application, infrastructure, or legacy project modules. Infrastructure supplies catalog values to the pure required-fields policy. The application clock import re-exports the domain `Clock` Protocol with the same type identity.
 
-Legacy `src/db`, provider, model, prompt-loader, and catalog paths remain compatibility surfaces until Phase 6. Legacy `Session`, `UserProfile`, and `Scheme` subclasses retain standalone hydration and no-argument catalog helpers. Production services and ports use canonical domain types.
+Database, provider, model, prompt-loader, catalog, webhook, and entrypoint facades have been removed. Canonical domain types, repository ports, and explicit constructor dependencies are used by production code and tests.
 
-Telegram handling consumes `SpeechProvider.is_available()` and STT/TTS methods without inspecting provider credentials. The legacy webhook facade preserves Sarvam-first selection and injects the selected provider; final provider construction moves into the composition root in Phase 6. HTTP catalog, document, rule, office, health, and taxonomy reads use repository ports. Database access and the existing SQL remain in the adapters. Application services receive prompt, safe-output, and catalog callbacks from legacy wiring rather than importing adapters.
+Telegram handling consumes `SpeechProvider.is_available()` and STT/TTS methods without inspecting provider credentials. The composition root selects Sarvam first and Bhashini second, then injects the selected provider. HTTP catalog, document, rule, office, health, and taxonomy reads use repository ports. Database access and the existing SQL remain in the adapters. Application services receive prompt, safe-output, catalog, repository, session, clock, queue, and AI capabilities through constructors.
 
 ## Four consumer surfaces
 
 | Surface | Entrypoint | Lifecycle |
 | --- | --- | --- |
 | Container API | `src/main.py`, started by `scripts/container_start.py` | FastAPI lifespan creates the database pool and starts the local background worker when configured |
-| Lambda API | `src.lambda_handler.handler` | Mangum currently uses `lifespan="auto"`; final lifecycle separation is Phase 6 work |
+| Lambda API | `src.dss.bootstrap.lambda_api.handler` | Mangum uses `lifespan="off"`; each invocation owns its async resources |
 | SQS worker | `src.memory_worker_handler.handler` | Processes working-memory messages and reports batch failures |
 | Operational scripts | `scripts/fork_session.py` and other utilities | Use current import surfaces; session inspection requires a shared store |
 
@@ -57,7 +57,7 @@ The SAM template defines API Gateway, the API and worker Lambdas, DynamoDB sessi
 
 The LLM proposes and deterministic rules decide. Plain-language topic, action, and scheme references override conflicting LLM output. `ConversationApplication` runs the turn pipeline through `TurnAnalyzer`, `LanguagePolicy`, `ProfileUpdateService`, `TransitionPolicy`, `TurnRenderer`, `CommandHandler`, and `TurnPersistence`. `ConversationService` supplies legacy collaborators through constructor-time wiring and keeps the external entrypoint stable. `LanguagePolicy.enforce` delegates to the shared localization path before persistence. `TransitionPolicy` owns resets and stale-selection invalidation. `TurnRenderer.snapshot` re-renders language-switch context explicitly. The profile-question renderer owns skipped-field and validation rendering and the single template-versus-LLM decision. Shared scheme views remain one injected collaborator. The legacy helper dependency order remains `service`, `views`, `turn_policy`, `intents`, `scheme_reference`, then `language`, from highest to lowest.
 
-Guidance presenters format supplied eligibility facts; they never invoke the evaluator or infer an income band. Guidance orchestration obtains those facts from the domain and preserves the existing deterministic-answer order before LLM generation. API, response-generation, AI-orchestration, and Telegram compatibility surfaces preserve live monkeypatch hooks and shared singleton identity until Phase 6.
+Guidance presenters format supplied eligibility facts; they never invoke the evaluator or infer an income band. Guidance orchestration obtains those facts from the domain and preserves the existing deterministic-answer order before LLM generation. Application and interface services use constructed dependencies; test-only LLM instance overrides and application singletons are removed.
 
 The ten states are `GREETING`, `SITUATION_UNDERSTANDING`, `PROFILE_COLLECTION`, `SCHEME_MATCHING`, `SCHEME_PRESENTATION`, `SCHEME_DETAILS`, `DOCUMENT_GUIDANCE`, `REJECTION_WARNINGS`, `APPLICATION_HELP`, and `CSC_HANDOFF`. The four scheme views can move between one another and back to the list. `src/services/fsm.py` owns the transition table.
 
