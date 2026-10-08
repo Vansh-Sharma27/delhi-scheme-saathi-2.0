@@ -1,7 +1,7 @@
 """Grounded response orchestration with injected generation callbacks."""
 
-from collections.abc import Callable
-from typing import Any, cast
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from src.dss.application.guidance.eligibility_rules import _build_eligibility_rule_text
 from src.dss.application.guidance.presenters import (
@@ -12,6 +12,7 @@ from src.dss.application.guidance.presenters import (
     _maybe_generate_scheme_justification_response,
 )
 from src.dss.application.guidance.scheme_terms import _maybe_generate_scheme_term_response
+from src.dss.application.ports.ai_tasks import AITasks
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
 from src.dss.domain.eligibility.presentation_facts import _infer_income_segment, eligibility_facts
@@ -23,7 +24,7 @@ async def generate_response(
     session: Session,
     context: dict[str, Any],
     *,
-    get_ai_orchestrator: Any,
+    get_ai_orchestrator: Callable[[], AITasks],
     get_prompt: Callable[[], str],
 ) -> str:
     """Generate natural language response using LLM and database context.
@@ -54,7 +55,7 @@ async def generate_response(
         user_language=session.language_preference,
     )
 
-    return cast(str, response)
+    return response
 
 
 def _last_assistant_response(session: Session) -> str | None:
@@ -73,7 +74,7 @@ async def generate_scheme_question_response(
     language: str,
     *,
     active_view: str | None = None,
-    generate_response: Any,
+    generate_response: Callable[[Session, dict[str, Any]], Awaitable[str]],
 ) -> str:
     """Answer a follow-up question about a selected scheme using grounded context."""
     term_response = _maybe_generate_scheme_term_response(
@@ -133,4 +134,4 @@ async def generate_scheme_question_response(
             "If the user asks for the same information in another language, translate or restate the last_assistant_response when it is relevant.",
         ],
     }
-    return cast(str, await generate_response(session, context))
+    return await generate_response(session, context)
