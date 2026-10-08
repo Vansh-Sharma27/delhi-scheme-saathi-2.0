@@ -273,6 +273,19 @@ async def run_scenario(
     *,
     session_store: SessionStore | None = None,
 ) -> ScenarioResult:
+    """Drive the canonical graph with constructor-injected deterministic ports."""
+    from tests.golden.runtime import run_scenario as run_canonical
+
+    return await run_canonical(scenario_id, user_id, turns, session_store=session_store)
+
+
+async def _legacy_run_scenario(
+    scenario_id: str,
+    user_id: str,
+    turns: list[TurnSpec],
+    *,
+    session_store: SessionStore | None = None,
+) -> ScenarioResult:
     """Drive a multi-turn conversation with isolated injected dependencies."""
     store = session_store or InMemorySessionStore(clock=_FixedClock())
     result = ScenarioResult(scenario_id=scenario_id)
