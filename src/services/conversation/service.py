@@ -1,7 +1,5 @@
 """Compatibility wiring for the application conversation pipeline."""
 
-import sys
-
 import asyncpg
 
 from src.db.session_store import SessionStore, get_session_store
@@ -43,6 +41,7 @@ from src.services import (
 from src.services.ai_background import enqueue_memory_refresh as enqueue_memory_refresh
 from src.services.ai_orchestrator import AIOrchestrator, get_ai_orchestrator
 from src.services.conversation import views
+from src.services.conversation.view_adapter import LegacySchemeViews
 from src.services.conversation_memory import (
     should_refresh_working_memory as should_refresh_working_memory,
 )
@@ -96,21 +95,16 @@ class ConversationService:
             scope_response=views.build_multi_beneficiary_scope_response,
         )
         self.renderer = TurnRenderer(
-            self.pool,
             questions=questions,
             run_matching=self._run_matching,
             profile_extractor=self.fields,
             response_generator=response_generator,
-            session_manager=session_manager,
-            views=views,
-            scheme_reference=scheme_reference,
-            scheme_matcher=scheme_matcher,
+            views=LegacySchemeViews(self.pool),
+            match_schemes=self._match_schemes,
             format_inline_keyboard=self._format_matching_keyboard,
             format_presented_scheme_keyboard=format_presented_scheme_keyboard,
         )
 
-        # ponytail: live module patch points survive until Phase 6 constructor injection.
-        dependencies = sys.modules[__name__]
         persistence = TurnPersistence(
             responses=response_generator,
             settings=self.settings,
@@ -118,10 +112,10 @@ class ConversationService:
             enqueue=self._enqueue_memory_refresh,
         )
         commands = CommandHandler(
-            self.pool,
             self.renderer,
             persistence,
-            dependencies=dependencies,
+            responses=response_generator,
+            views=self.renderer.views,
             session_store=self.session_store,
         )
         self.application = ConversationApplication(
