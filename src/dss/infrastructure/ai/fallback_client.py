@@ -366,15 +366,3 @@ class FallbackLLMClient:
 class LLMClient(FallbackLLMClient):
     """Alias for FallbackLLMClient (backward compatibility)."""
     pass
-
-
-# Singleton instance
-_llm_client: FallbackLLMClient | None = None
-
-
-def get_llm_client() -> FallbackLLMClient:
-    """Get or create LLM client singleton."""
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = FallbackLLMClient()
-    return _llm_client

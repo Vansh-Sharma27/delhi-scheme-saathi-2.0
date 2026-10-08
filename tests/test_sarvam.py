@@ -6,11 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.dss.application.ports.speech import STTResult, TTSResult
-from src.dss.infrastructure.speech.sarvam import (
-    SarvamClient,
-    configure_sarvam_client,
-    get_sarvam_client,
-)
+from src.dss.infrastructure.speech.sarvam import SarvamClient
+from src.dss.settings import Settings
 
 
 class TestSarvamClient:
@@ -18,7 +15,7 @@ class TestSarvamClient:
 
     def test_client_initialization_without_key(self):
         """Test client initializes without API key."""
-        client = SarvamClient()
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         assert client.api_key == ""
 
     def test_client_initialization_with_key(self):
@@ -33,7 +30,7 @@ class TestSpeechToText:
     @pytest.mark.asyncio
     async def test_stt_without_api_key_returns_placeholder(self):
         """Test STT returns placeholder when no API key configured."""
-        client = SarvamClient(api_key="")
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         result = await client.speech_to_text(
             audio_bytes=b"test audio data",
             source_lang="hi",
@@ -154,7 +151,7 @@ class TestTextToSpeech:
     @pytest.mark.asyncio
     async def test_tts_without_api_key_returns_empty(self):
         """Test TTS returns empty bytes when no API key configured."""
-        client = SarvamClient(api_key="")
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         result = await client.text_to_speech(
             text="नमस्ते",
             target_lang="hi",
@@ -221,21 +218,21 @@ class TestLanguageDetection:
     @pytest.mark.asyncio
     async def test_detect_hindi(self):
         """Test detection of Hindi text."""
-        client = SarvamClient()
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         lang = await client.detect_language("नमस्ते, मुझे पेंशन चाहिए")
         assert lang == "hi"
 
     @pytest.mark.asyncio
     async def test_detect_english(self):
         """Test detection of English text."""
-        client = SarvamClient()
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         lang = await client.detect_language("Hello, I need pension information")
         assert lang == "en"
 
     @pytest.mark.asyncio
     async def test_detect_hinglish_defaults_to_hindi(self):
         """Test Hinglish text defaults to Hindi."""
-        client = SarvamClient()
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         # Hinglish with <30% Devanagari should detect as English
         lang = await client.detect_language("Mujhe pension chahiye please")
         assert lang == "en"
@@ -243,26 +240,26 @@ class TestLanguageDetection:
     @pytest.mark.asyncio
     async def test_detect_empty_defaults_to_hindi(self):
         """Test empty text defaults to Hindi."""
-        client = SarvamClient()
+        client = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key=""))
         lang = await client.detect_language("123 456")
         assert lang == "hi"
 
 
-class TestSingleton:
-    """Tests for singleton pattern."""
-
-    def test_get_sarvam_client_returns_same_instance(self):
-        """Test get_sarvam_client returns singleton."""
-        client1 = get_sarvam_client()
-        client2 = get_sarvam_client()
-        assert client1 is client2
-
-    def test_configure_sarvam_client_creates_new_instance(self):
-        """Test configure_sarvam_client replaces singleton."""
-        original = get_sarvam_client()
-        new_client = configure_sarvam_client(api_key="new-key")
-        latest = get_sarvam_client()
-
-        assert new_client is not original
-        assert new_client is latest
-        assert new_client.api_key == "new-key"
+class TestInstanceIsolation:
+    @pytest.mark.asyncio
+    async def test_credentials_and_http_lifetimes_are_independent(self):
+        first = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key="first-key"))
+        second = SarvamClient(settings=Settings(_env_file=None, sarvam_api_key="second-key"))
+        try:
+            first_http = await first._get_client()
+            second_http = await second._get_client()
+            assert first_http is not second_http
+            assert first_http.headers["api-subscription-key"] == "first-key"
+            assert second_http.headers["api-subscription-key"] == "second-key"
+            await first.close()
+            assert first_http.is_closed
+            assert not second_http.is_closed
+            assert await second._get_client() is second_http
+        finally:
+            await first.close()
+            await second.close()

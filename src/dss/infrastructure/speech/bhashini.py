@@ -281,30 +281,3 @@ class BhashiniClient:
         if devanagari_ratio > 0.3:
             return "hi"
         return "en"
-
-
-# Singleton instance
-_bhashini_client: BhashiniClient | None = None
-
-
-def get_bhashini_client() -> BhashiniClient:
-    """Get singleton Bhashini client instance."""
-    global _bhashini_client
-    if _bhashini_client is None:
-        _bhashini_client = BhashiniClient()
-    return _bhashini_client
-
-
-def configure_bhashini_client(
-    api_key: str | None = None,
-    user_id: str | None = None,
-    ulca_api_key: str | None = None,
-) -> BhashiniClient:
-    """Configure and return Bhashini client."""
-    global _bhashini_client
-    _bhashini_client = BhashiniClient(
-        api_key=api_key,
-        user_id=user_id,
-        ulca_api_key=ulca_api_key,
-    )
-    return _bhashini_client

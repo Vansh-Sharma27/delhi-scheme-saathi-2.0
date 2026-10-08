@@ -199,15 +199,3 @@ class FallbackEmbeddingClient:
 class EmbeddingClient(FallbackEmbeddingClient):
     """Alias for FallbackEmbeddingClient (backward compatibility)."""
     pass
-
-
-# Singleton instance
-_embedding_client: FallbackEmbeddingClient | None = None
-
-
-def get_embedding_client() -> FallbackEmbeddingClient:
-    """Get or create embedding client singleton."""
-    global _embedding_client
-    if _embedding_client is None:
-        _embedding_client = FallbackEmbeddingClient()
-    return _embedding_client

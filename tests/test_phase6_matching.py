@@ -28,8 +28,13 @@ def legacy() -> ModuleType:
     tree = ast.parse(source)
     # Remap imports only; the historical matching implementation stays independent.
     for node in tree.body:
-        if isinstance(node, ast.ImportFrom) and node.module == "src.integrations.embedding_client":
+        if isinstance(node, ast.ImportFrom) and node.module in {
+            "src.integrations.embedding_client",
+            "src.dss.infrastructure.embeddings.fallback_client",
+        }:
             node.module = "src.dss.infrastructure.embeddings.fallback_client"
+            node.names = [name for name in node.names if name.name != "get_embedding_client"]
+    tree.body = [node for node in tree.body if not isinstance(node, ast.ImportFrom) or node.names]
     exec(compile(tree, source_ref, "exec"), module.__dict__)
     return module
 
@@ -54,7 +59,7 @@ async def test_constructed_matcher_matches_existing_pipeline(monkeypatch, embedd
     assert legacy.match_schemes.__code__ is not SchemeMatcher.match_schemes.__code__
     assert legacy.match_schemes.__module__ == "historical_scheme_matcher"
     profile = UserProfile(gender="male", life_event="HOUSING")
-    monkeypatch.setattr(legacy, "get_embedding_client", lambda: embeddings)
+    monkeypatch.setattr(legacy, "get_embedding_client", lambda: embeddings, raising=False)
     monkeypatch.setattr(legacy, "retrieve_candidates", AsyncMock(return_value=candidates))
     monkeypatch.setattr(legacy, "get_canonical_life_events", lambda sid: [])
     expected = await legacy.match_schemes(None, profile, "housing", 1)

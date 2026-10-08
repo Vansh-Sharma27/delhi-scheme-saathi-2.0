@@ -543,15 +543,3 @@ Provide a 2-3 sentence summary in English:
         except Exception as e:
             logger.error("Bedrock summarization failed: %s", e)
             return current_summary or ""
-
-
-# Singleton instance
-_bedrock_client: BedrockLLMClient | None = None
-
-
-def get_bedrock_client() -> BedrockLLMClient:
-    """Get or create Bedrock LLM client singleton."""
-    global _bedrock_client
-    if _bedrock_client is None:
-        _bedrock_client = BedrockLLMClient()
-    return _bedrock_client

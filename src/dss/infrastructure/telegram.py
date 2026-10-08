@@ -264,15 +264,3 @@ class TelegramClient:
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()
-
-
-# Global client instance
-_telegram_client: TelegramClient | None = None
-
-
-def get_telegram_client() -> TelegramClient:
-    """Get or create Telegram client singleton."""
-    global _telegram_client
-    if _telegram_client is None:
-        _telegram_client = TelegramClient()
-    return _telegram_client

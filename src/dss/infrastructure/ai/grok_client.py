@@ -386,15 +386,3 @@ Provide a 2-3 sentence summary in English:
             logger.error("Conversation summarization failed: %s", e)
             # Re-raise so the fallback wrapper can decide fallback behavior.
             raise
-
-
-# Global client instance
-_grok_client: GrokLLMClient | None = None
-
-
-def get_grok_client() -> GrokLLMClient:
-    """Get or create Grok LLM client singleton."""
-    global _grok_client
-    if _grok_client is None:
-        _grok_client = GrokLLMClient()
-    return _grok_client

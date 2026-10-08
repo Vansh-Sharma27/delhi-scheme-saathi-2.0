@@ -276,30 +276,3 @@ class SarvamClient:
         if devanagari_ratio > 0.3:
             return "hi"
         return "en"
-
-
-# Singleton instance
-_sarvam_client: SarvamClient | None = None
-
-
-def get_sarvam_client() -> SarvamClient:
-    """Get singleton Sarvam client instance."""
-    global _sarvam_client
-    if _sarvam_client is None:
-        _sarvam_client = SarvamClient()
-    return _sarvam_client
-
-
-def configure_sarvam_client(api_key: str | None = None) -> SarvamClient:
-    """Configure and return Sarvam client."""
-    global _sarvam_client
-    old = _sarvam_client
-    _sarvam_client = SarvamClient(api_key=api_key)
-    if old is not None:
-        import asyncio
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(old.close())
-        except RuntimeError:
-            pass  # No running loop (startup context); old client has no open connections yet
-    return _sarvam_client

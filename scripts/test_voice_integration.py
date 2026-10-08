@@ -32,20 +32,23 @@ async def test_voice_connection():
     print("VOICE INTEGRATION TEST (Sarvam AI / Bhashini)")
     print("=" * 60)
 
-    sarvam_key = os.environ.get("SARVAM_API_KEY", "")
-    bhashini_key = os.environ.get("BHASHINI_API_KEY", "")
+    from src.dss.settings import Settings
+
+    settings = Settings()
+    sarvam_key = settings.sarvam_api_key
+    bhashini_key = settings.bhashini_api_key
 
     if sarvam_key:
         print(f"\n[OK] SARVAM_API_KEY configured (length: {len(sarvam_key)})")
         print("     Using Sarvam AI for voice services")
-        from src.dss.infrastructure.speech.sarvam import configure_sarvam_client
-        client = configure_sarvam_client(api_key=sarvam_key)
+        from src.dss.infrastructure.speech.sarvam import SarvamClient
+        client = SarvamClient(settings=settings)
         provider = "Sarvam AI"
     elif bhashini_key:
         print(f"\n[OK] BHASHINI_API_KEY configured (length: {len(bhashini_key)})")
         print("     Using Bhashini for voice services")
-        from src.dss.infrastructure.speech.bhashini import configure_bhashini_client
-        client = configure_bhashini_client(api_key=bhashini_key)
+        from src.dss.infrastructure.speech.bhashini import BhashiniClient
+        client = BhashiniClient(settings=settings)
         provider = "Bhashini"
     else:
         print("\n[!] No voice API key configured")
@@ -181,32 +184,32 @@ async def main():
         print("=" * 60)
         return
 
-    results = {}
+    try:
+        results = {}
 
-    # Test language detection (doesn't need API)
-    results["language_detection"] = await test_language_detection(client)
+        # Test language detection (doesn't need API)
+        results["language_detection"] = await test_language_detection(client)
 
-    # Test TTS
-    results["tts"] = await test_text_to_speech(client, provider)
+        # Test TTS
+        results["tts"] = await test_text_to_speech(client, provider)
 
-    # Test STT (uses TTS output)
-    results["stt"] = await test_speech_to_text(client, provider)
+        # Test STT (uses TTS output)
+        results["stt"] = await test_speech_to_text(client, provider)
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("TEST RESULTS SUMMARY")
-    print("=" * 60)
-    print(f"Provider: {provider}")
+        # Summary
+        print("\n" + "=" * 60)
+        print("TEST RESULTS SUMMARY")
+        print("=" * 60)
+        print(f"Provider: {provider}")
 
-    for test_name, passed in results.items():
-        status = "[PASS]" if passed else ("[SKIP]" if passed is None else "[FAIL]")
-        print(f"  {status} {test_name}")
+        for test_name, passed in results.items():
+            status = "[PASS]" if passed else ("[SKIP]" if passed is None else "[FAIL]")
+            print(f"  {status} {test_name}")
 
-    all_passed = all(v is True for v in results.values() if v is not None)
-    print("\n" + ("All tests passed!" if all_passed else "Some tests failed."))
-
-    # Close client
-    await client.close()
+        all_passed = all(v is True for v in results.values() if v is not None)
+        print("\n" + ("All tests passed!" if all_passed else "Some tests failed."))
+    finally:
+        await client.close()
 
 
 if __name__ == "__main__":
