@@ -116,10 +116,10 @@ class ConversationService:
         # ponytail: live module patch points survive until Phase 6 constructor injection.
         dependencies = sys.modules[__name__]
         persistence = TurnPersistence(
-            dependencies=dependencies,
+            responses=response_generator,
             settings=self.settings,
             session_store=self.session_store,
-            clock=self.clock,
+            enqueue=self._enqueue_memory_refresh,
         )
         commands = CommandHandler(
             self.pool,
@@ -143,6 +143,9 @@ class ConversationService:
 
     async def handle_message(self, request: ChatRequest) -> ChatResponse:
         return await self.application.handle_message(request)
+
+    async def _enqueue_memory_refresh(self, user_id: str, turn_count: int) -> bool:
+        return await enqueue_memory_refresh(user_id, turn_count, clock=self.clock)
 
     async def _run_matching(
         self,
