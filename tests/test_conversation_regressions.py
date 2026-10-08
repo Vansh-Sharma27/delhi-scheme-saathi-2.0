@@ -682,9 +682,9 @@ def test_scheme_resolution_handles_natural_reference_to_secondary_candidate() ->
 
 
 @pytest.mark.asyncio
-async def test_no_match_guard_does_not_rerun_matching_without_profile_change() -> None:
+async def test_no_match_guard_does_not_rerun_matching_without_profile_change(graph) -> None:
     """No-match recovery should not loop into matching again on filler replies."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-no-match-guard",
@@ -701,7 +701,7 @@ async def test_no_match_guard_does_not_rerun_matching_without_profile_change() -
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -715,7 +715,7 @@ async def test_no_match_guard_does_not_rerun_matching_without_profile_change() -
     )
     match_schemes = AsyncMock(return_value=[])
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-no-match-guard", message="ok")
         )
@@ -726,9 +726,9 @@ async def test_no_match_guard_does_not_rerun_matching_without_profile_change() -
 
 
 @pytest.mark.asyncio
-async def test_details_profile_change_clears_selection_and_rematches() -> None:
+async def test_details_profile_change_clears_selection_and_rematches(graph) -> None:
     """Eligibility changes inside details should invalidate the old scheme."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-details-rematch",
@@ -744,7 +744,7 @@ async def test_details_profile_change_clears_selection_and_rematches() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -780,10 +780,7 @@ async def test_details_profile_change_clears_selection_and_rematches() -> None:
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.service.format_inline_keyboard",
-        return_value=[[{"text": "Scheme SCH-2", "callback_data": "scheme:SCH-2"}]],
-    ):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-details-rematch", message="Income is 100000")
         )
@@ -808,9 +805,9 @@ def test_generic_loan_keyword_does_not_force_education_life_event() -> None:
 
 
 @pytest.mark.asyncio
-async def test_field_answer_turn_does_not_blindly_replace_known_life_event() -> None:
+async def test_field_answer_turn_does_not_blindly_replace_known_life_event(graph) -> None:
     """Income collection turns must not overwrite an already-known topic."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-voice-income",
@@ -828,7 +825,7 @@ async def test_field_answer_turn_does_not_blindly_replace_known_life_event() -> 
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -842,7 +839,7 @@ async def test_field_answer_turn_does_not_blindly_replace_known_life_event() -> 
     )
     match_schemes = AsyncMock(return_value=[])
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-voice-income",
@@ -862,9 +859,9 @@ async def test_field_answer_turn_does_not_blindly_replace_known_life_event() -> 
 
 
 @pytest.mark.asyncio
-async def test_unparsed_income_answer_reasks_field_instead_of_following_llm_drift() -> None:
+async def test_unparsed_income_answer_reasks_field_instead_of_following_llm_drift(graph) -> None:
     """While collecting income, an unparsed answer should not let the LLM switch topics."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-income-reask",
@@ -882,7 +879,7 @@ async def test_unparsed_income_answer_reasks_field_instead_of_following_llm_drif
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -907,9 +904,9 @@ async def test_unparsed_income_answer_reasks_field_instead_of_following_llm_drif
 
 
 @pytest.mark.asyncio
-async def test_field_help_question_stays_on_same_pending_field() -> None:
+async def test_field_help_question_stays_on_same_pending_field(graph) -> None:
     """Field clarification questions should be answered without drifting off-topic."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-income-help",
@@ -927,7 +924,7 @@ async def test_field_help_question_stays_on_same_pending_field() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -951,9 +948,9 @@ async def test_field_help_question_stays_on_same_pending_field() -> None:
 
 
 @pytest.mark.asyncio
-async def test_multi_beneficiary_followup_while_collecting_answers_scope_question() -> None:
+async def test_multi_beneficiary_followup_while_collecting_answers_scope_question(graph) -> None:
     """Collection turns should answer applicant-scope questions instead of re-asking income."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-multi-beneficiary-followup",
@@ -973,7 +970,7 @@ async def test_multi_beneficiary_followup_while_collecting_answers_scope_questio
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1001,9 +998,9 @@ async def test_multi_beneficiary_followup_while_collecting_answers_scope_questio
 
 
 @pytest.mark.asyncio
-async def test_widow_flow_skips_irrelevant_category_and_asks_income_next() -> None:
+async def test_widow_flow_skips_irrelevant_category_and_asks_income_next(graph) -> None:
     """Widow-support collection should not insist on caste category before income."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-widow-income-next",
@@ -1021,7 +1018,7 @@ async def test_widow_flow_skips_irrelevant_category_and_asks_income_next() -> No
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1046,9 +1043,9 @@ async def test_widow_flow_skips_irrelevant_category_and_asks_income_next() -> No
 
 
 @pytest.mark.asyncio
-async def test_new_widow_flow_adds_empathy_before_first_collection_question() -> None:
+async def test_new_widow_flow_adds_empathy_before_first_collection_question(graph) -> None:
     """Death-in-family intake should prepend empathy before asking the next field."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1071,7 +1068,7 @@ async def test_new_widow_flow_adds_empathy_before_first_collection_question() ->
         )
     )
 
-    session = await get_session_store().get("user-new-widow-empathy")
+    session = await graph.store.get("user-new-widow-empathy")
     assert "dukh" in result.text.lower() or "sorry" in result.text.lower()
     assert "age" in result.text.lower()
     assert session is not None
@@ -1079,10 +1076,10 @@ async def test_new_widow_flow_adds_empathy_before_first_collection_question() ->
 
 
 @pytest.mark.asyncio
-async def test_llm_inferred_widow_context_does_not_reask_gender() -> None:
+async def test_llm_inferred_widow_context_does_not_reask_gender(graph) -> None:
     """If the LLM infers widow context, the bot should move on to the next missing field."""
-    store = get_session_store()
-    service = ConversationService(db_pool=AsyncMock())
+    store = graph.store
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1112,10 +1109,10 @@ async def test_llm_inferred_widow_context_does_not_reask_gender() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rule_based_spouse_loss_fallback_completes_gender_for_mixed_script_widow() -> None:
+async def test_rule_based_spouse_loss_fallback_completes_gender_for_mixed_script_widow(graph) -> None:
     """Mixed-script widow wording should not re-ask gender when the LLM misses it."""
-    store = get_session_store()
-    service = ConversationService(db_pool=AsyncMock())
+    store = graph.store
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1147,9 +1144,9 @@ async def test_rule_based_spouse_loss_fallback_completes_gender_for_mixed_script
 
 
 @pytest.mark.asyncio
-async def test_unlocked_hinglish_turn_does_not_drift_to_english_reply() -> None:
+async def test_unlocked_hinglish_turn_does_not_drift_to_english_reply(graph) -> None:
     """Strong Hinglish turns should stay Hinglish in unlocked sessions."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-unlocked-hinglish-drift",
@@ -1164,7 +1161,7 @@ async def test_unlocked_hinglish_turn_does_not_drift_to_english_reply() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1187,10 +1184,7 @@ async def test_unlocked_hinglish_turn_does_not_drift_to_english_reply() -> None:
         )
     )
 
-    with patch(
-        "src.services.response_generator.get_ai_orchestrator",
-        return_value=mock_ai,
-    ):
+    with patch.object(service.responses, "ai", mock_ai):
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-unlocked-hinglish-drift",
@@ -1210,9 +1204,9 @@ async def test_unlocked_hinglish_turn_does_not_drift_to_english_reply() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unlocked_hinglish_income_turn_preserves_scheme_list_language() -> None:
+async def test_unlocked_hinglish_income_turn_preserves_scheme_list_language(graph) -> None:
     """Income collection turns should keep the active Hinglish language on scheme presentation."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-unlocked-hinglish-income",
@@ -1231,7 +1225,7 @@ async def test_unlocked_hinglish_income_turn_preserves_scheme_list_language() ->
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1253,10 +1247,7 @@ async def test_unlocked_hinglish_income_turn_preserves_scheme_list_language() ->
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.service.format_inline_keyboard",
-        return_value=[[{"text": "Education Loan Scheme - Delhi", "callback_data": "scheme:SCH-EDU-LIST"}]],
-    ):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-unlocked-hinglish-income",
@@ -1275,9 +1266,9 @@ async def test_unlocked_hinglish_income_turn_preserves_scheme_list_language() ->
 
 
 @pytest.mark.asyncio
-async def test_explicit_topic_switch_ignores_bogus_scheme_selection_and_updates_need() -> None:
+async def test_explicit_topic_switch_ignores_bogus_scheme_selection_and_updates_need(graph) -> None:
     """Topic switches should not get trapped by a hallucinated selected_scheme_id."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-topic-switch-live-shape",
@@ -1302,7 +1293,7 @@ async def test_explicit_topic_switch_ignores_bogus_scheme_selection_and_updates_
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1316,7 +1307,7 @@ async def test_explicit_topic_switch_ignores_bogus_scheme_selection_and_updates_
     )
     match_schemes = AsyncMock(return_value=[])
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-topic-switch-live-shape",
@@ -1336,9 +1327,9 @@ async def test_explicit_topic_switch_ignores_bogus_scheme_selection_and_updates_
 
 
 @pytest.mark.asyncio
-async def test_explicit_topic_switch_suppresses_old_scheme_details_action() -> None:
+async def test_explicit_topic_switch_suppresses_old_scheme_details_action(graph) -> None:
     """A topic-switch turn should not reopen the old single presented scheme."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-topic-switch-old-details",
@@ -1363,7 +1354,7 @@ async def test_explicit_topic_switch_suppresses_old_scheme_details_action() -> N
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1377,8 +1368,8 @@ async def test_explicit_topic_switch_suppresses_old_scheme_details_action() -> N
     )
     match_schemes = AsyncMock(return_value=[])
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.views.build_scheme_details_text",
+    with patch.object(service, "match_schemes", match_schemes), patch.object(
+        service.views, "build_scheme_details_text",
         AsyncMock(return_value="DETAILS"),
     ) as details_mock:
         result = await service.handle_message(
@@ -1401,10 +1392,10 @@ async def test_explicit_topic_switch_suppresses_old_scheme_details_action() -> N
 
 
 @pytest.mark.asyncio
-async def test_spouse_conflict_in_llm_reply_falls_back_to_deterministic_question() -> None:
+async def test_spouse_conflict_in_llm_reply_falls_back_to_deterministic_question(graph) -> None:
     """A wrong-spouse LLM reply should be discarded in favor of a safe deterministic prompt."""
-    store = get_session_store()
-    service = ConversationService(db_pool=AsyncMock())
+    store = graph.store
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
