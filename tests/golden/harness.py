@@ -7,7 +7,6 @@ all ChatResponse fields, all persisted Session fields, and stable AI telemetry.
 
 from __future__ import annotations
 
-import asyncio
 import difflib
 import json
 import os
@@ -17,20 +16,12 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, patch
 
-from src.db.session_store import InMemorySessionStore, SessionStore
-from src.dss.domain.schemes.scheme import SchemeCandidate
-from src.models.api import ChatRequest, ChatResponse
-from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.models.session import Session
-from src.services.ai_orchestrator import (
-    AIExecutionPolicy,
-    AIOrchestrator,
-    AITaskType,
-    LLMUsageEvent,
-)
-from src.services.conversation import ConversationService
+from src.dss.application.conversation.contracts import ChatResponse
+from src.dss.application.ports.session_repository import SessionStore
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeMatch
+from src.dss.observability.llm_usage import LLMUsageEvent
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "fixtures"
 GOLDEN_REGENERATE_APPROVAL_ENV = "GOLDEN_REGENERATE_APPROVED"
@@ -273,189 +264,10 @@ async def run_scenario(
     *,
     session_store: SessionStore | None = None,
 ) -> ScenarioResult:
-    """Drive a multi-turn conversation with isolated injected dependencies."""
-    store = session_store or InMemorySessionStore(clock=_FixedClock())
-    result = ScenarioResult(scenario_id=scenario_id)
-    usage_events: list[LLMUsageEvent] = []
+    """Drive the canonical graph with constructor-injected deterministic ports."""
+    from tests.golden.runtime import run_scenario as run_canonical
 
-    fake_llm = AsyncMock()
-    orchestrator = AIOrchestrator(
-        llm_client=fake_llm,
-        policies={
-            AITaskType.ANALYZE_MESSAGE: AIExecutionPolicy(
-                timeout_seconds=_TIMEOUT_SECONDS,
-                priority="inline",
-            )
-        },
-        usage_sink=usage_events.append,
-    )
-    service = ConversationService(
-        db_pool=AsyncMock(),
-        ai_orchestrator=orchestrator,
-        session_store=store,
-        clock=_FixedClock(),
-    )
-
-    get_scheme_mock = AsyncMock(return_value=None)
-    docs_mock = AsyncMock(return_value=[])
-    rejection_mock = AsyncMock(return_value=[])
-    offices_nearest_mock = AsyncMock(return_value=[])
-    offices_district_mock = AsyncMock(return_value=[])
-
-    fake_resp_ai = AsyncMock()
-    fake_resp_ai.generate_response = AsyncMock(return_value="")
-
-    fake_embedding_client = AsyncMock()
-    fake_embedding_client.get_embedding = AsyncMock(return_value=[0.0] * 1024)
-    fake_hybrid_search = AsyncMock(return_value=[])
-
-    with (
-        patch(
-            "src.services.scheme_matcher.get_embedding_client",
-            return_value=fake_embedding_client,
-        ),
-        patch("src.services.scheme_matcher.retrieve_candidates", new=fake_hybrid_search),
-        # Golden scenarios supply evaluated facts; real evaluation is pinned separately.
-        patch(
-            "src.services.scheme_matcher.calculate_eligibility_match",
-            side_effect=lambda scheme, profile: next(
-                match.eligibility_match for match in turn_spec.match_result
-                if match.scheme is scheme
-            ),
-        ),
-        patch(
-            "src.services.conversation.views.scheme_repo.get_scheme_by_id",
-            new=get_scheme_mock,
-        ),
-        patch(
-            "src.services.conversation.views.document_resolver.resolve_documents_for_scheme",
-            new=docs_mock,
-        ),
-        patch(
-            "src.services.conversation.views.rejection_engine.get_rejection_warnings",
-            new=rejection_mock,
-        ),
-        patch(
-            "src.services.conversation.views.office_repo.get_nearest_offices",
-            new=offices_nearest_mock,
-        ),
-        patch(
-            "src.services.conversation.views.office_repo.get_offices_by_district",
-            new=offices_district_mock,
-        ),
-        patch(
-            "src.services.response_generator.get_ai_orchestrator",
-            return_value=fake_resp_ai,
-        ),
-        patch(
-            "src.services.conversation.service.enqueue_memory_refresh",
-            new=AsyncMock(return_value=False),
-        ),
-    ):
-        for turn_spec in turns:
-            events_start = len(usage_events)
-            timeout_cancelled = False
-
-            if turn_spec.llm_timeout:
-
-                async def _slow_override(
-                    _turn_spec: TurnSpec = turn_spec,
-                    **_kw: Any,
-                ) -> Any:
-                    nonlocal timeout_cancelled
-                    try:
-                        await asyncio.sleep(_TIMEOUT_SECONDS * 10)
-                    except asyncio.CancelledError:
-                        timeout_cancelled = True
-                        raise
-                    return _turn_spec.llm_analysis
-
-                fake_llm.analyze_message = _slow_override
-            else:
-                fake_llm.analyze_message = AsyncMock(
-                    return_value=turn_spec.llm_analysis
-                )
-
-            fake_llm.judge_scheme_relevance = AsyncMock(
-                return_value=(
-                    turn_spec.llm_judge
-                    if turn_spec.llm_judge is not None
-                    else _DEFAULT_JUDGE_RESULT
-                )
-            )
-
-            fake_hybrid_search.return_value = [
-                SchemeCandidate(scheme=match.scheme, similarity=match.similarity)
-                for match in turn_spec.match_result
-            ]
-            if turn_spec.embedding_failure:
-                fake_embedding_client.get_embedding = AsyncMock(
-                    side_effect=RuntimeError("embedding provider unavailable"),
-                )
-            else:
-                fake_embedding_client.get_embedding = AsyncMock(
-                    return_value=[0.0] * 1024,
-                )
-
-            get_scheme_mock.return_value = turn_spec.scheme_for_details
-            fake_resp_ai.generate_response = AsyncMock(
-                return_value=turn_spec.llm_generate or ""
-            )
-
-            response = await service.handle_message(
-                ChatRequest(
-                    user_id=user_id,
-                    message=turn_spec.message,
-                    message_type=turn_spec.message_type,
-                    callback_data=turn_spec.callback_data,
-                )
-            )
-            session = await store.get(user_id)
-
-            record = TurnRecord(
-                response_text=response.text,
-                response_text_hindi=response.text_hindi,
-                response_audio_url=response.audio_url,
-                response_documents=[_model_dump(item) for item in response.documents],
-                response_rejection_warnings=[
-                    _model_dump(item) for item in response.rejection_warnings
-                ],
-                response_offices=[_model_dump(item) for item in response.offices],
-                next_state=response.next_state or "",
-                language=response.language,
-                schemes=[_model_dump(item) for item in response.schemes],
-                inline_keyboard=response.inline_keyboard,
-                ai_events=[
-                    _event_snapshot(event) for event in usage_events[events_start:]
-                ],
-                llm_timeout_cancelled=timeout_cancelled,
-            )
-            if session is not None:
-                record.session_user_id = session.user_id
-                record.session_state = session.state.value
-                record.session_profile = session.user_profile.model_dump(mode="json")
-                record.session_messages = [
-                    message.model_dump(mode="json") for message in session.messages
-                ]
-                record.session_working_memory = session.working_memory.model_dump(mode="json")
-                record.session_discussed_schemes = list(session.discussed_schemes)
-                record.session_selected_scheme_id = session.selected_scheme_id
-                record.session_presented_schemes = list(session.presented_schemes)
-                record.session_language_preference = session.language_preference
-                record.session_language_locked = session.language_locked
-                record.session_currently_asking = session.currently_asking
-                record.session_skipped_fields = list(session.skipped_fields)
-                record.session_awaiting_profile_change = session.awaiting_profile_change
-                record.session_completed_turn_count = session.completed_turn_count
-                record.session_last_memory_refresh_turn = session.last_memory_refresh_turn
-                record.session_pending_memory_job = session.pending_memory_job
-                record.session_created_at = session.created_at.isoformat()
-                record.session_updated_at = session.updated_at.isoformat()
-                record.session_metadata = dict(session.metadata)
-
-            result.turns.append(record)
-
-    return result
+    return await run_canonical(scenario_id, user_id, turns, session_store=session_store)
 
 
 def result_to_dict(result: ScenarioResult) -> dict[str, Any]:

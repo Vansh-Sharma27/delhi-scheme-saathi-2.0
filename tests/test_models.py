@@ -1,7 +1,12 @@
 """Tests for Pydantic models."""
 
-from src.models.scheme import EligibilityCriteria, Scheme
-from src.models.session import ConversationState, Session, UserProfile
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme
+from src.dss.infrastructure.database.catalog import _load_catalog
+from src.dss.infrastructure.database.scheme_codec import scheme_from_row
+from src.dss.infrastructure.sessions.codec import session_from_item
 
 
 class TestUserProfile:
@@ -12,12 +17,12 @@ class TestUserProfile:
         profile = UserProfile()
         assert profile.age is None
         assert profile.life_event is None
-        assert profile.is_complete_for_matching is False
+        assert profile.complete_for_matching(_load_catalog().values()) is False
 
     def test_profile_with_only_life_event_not_complete(self):
         """Matching requires core eligibility fields, not just life event."""
         profile = UserProfile(life_event="HOUSING")
-        assert profile.is_complete_for_matching is False
+        assert profile.complete_for_matching(_load_catalog().values()) is False
 
     def test_profile_complete_for_matching(self):
         """Profile is complete when required matching fields are present."""
@@ -26,7 +31,7 @@ class TestUserProfile:
             age=30,
             annual_income=250000,
         )
-        assert profile.is_complete_for_matching is True
+        assert profile.complete_for_matching(_load_catalog().values()) is True
 
     def test_widow_profile_does_not_require_category_for_matching(self):
         """Widow/death-in-family flows should not block on caste category."""
@@ -36,7 +41,7 @@ class TestUserProfile:
             gender="female",
             annual_income=50000,
         )
-        assert profile.is_complete_for_matching is True
+        assert profile.complete_for_matching(_load_catalog().values()) is True
 
     def test_profile_merge(self):
         """Test immutable profile merge."""
@@ -192,7 +197,8 @@ class TestEligibilityCriteria:
 
     def test_scheme_from_db_row_uses_canonical_life_events(self):
         """Bundled scheme metadata should override stale DB life-event tags."""
-        scheme = Scheme.from_db_row(
+        scheme = scheme_from_row(
+            Scheme,
             {
                 "id": "SCH-DELHI-001",
                 "name": "PMAY-U 2.0",
@@ -219,7 +225,7 @@ class TestEligibilityCriteria:
         item["state"] = "UNDERSTANDING"
         item["user_profile"] = {"life_event": "HOUSING"}
 
-        session = Session.from_dynamodb_item(item)
+        session = session_from_item(Session, item)
 
         assert session.state == ConversationState.PROFILE_COLLECTION
 
@@ -229,7 +235,7 @@ class TestEligibilityCriteria:
         item.pop("working_memory", None)
         item["conversation_summary"] = "User needs housing help and has low income."
 
-        session = Session.from_dynamodb_item(item)
+        session = session_from_item(Session, item)
 
         assert session.working_memory.summary == "User needs housing help and has low income."
 

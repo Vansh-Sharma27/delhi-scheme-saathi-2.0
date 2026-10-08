@@ -10,7 +10,7 @@ the ports; Phase 5 threads these adapters through the service constructors
 and Phase 6 wires them in the composition root.
 
 The adapters and ports import canonical domain values directly. Raw scheme
-retrieval delegates independently of the legacy evaluated search method.
+retrieval leaves evaluation to the application matcher.
 
 ``haversine_distance`` stays on the office repo module: it is a pure helper
 of the in-Python distance sort, not part of any port.
@@ -30,7 +30,7 @@ from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.document import Document
 from src.dss.domain.schemes.office import Office
 from src.dss.domain.schemes.rejection_rule import RejectionRule
-from src.dss.domain.schemes.scheme import Scheme, SchemeCandidate, SchemeMatch
+from src.dss.domain.schemes.scheme import Scheme, SchemeCandidate
 from src.dss.infrastructure.database import (
     document_repo,
     office_repo,
@@ -63,21 +63,6 @@ class PostgresSchemeRepository(SchemeRepository):
 
     async def list_life_events(self) -> list[dict[str, Any]]:
         return await scheme_repo.list_life_events(self._pool)
-
-    async def hybrid_search(
-        self,
-        life_event: str | None,
-        profile: UserProfile,
-        query_embedding: list[float] | None = None,
-        limit: int = 5,
-    ) -> list[SchemeMatch]:
-        return await scheme_repo.hybrid_search(
-            self._pool,
-            life_event,
-            profile,
-            query_embedding,
-            limit,
-        )
 
     async def search_schemes_by_text(
         self, search_text: str, limit: int = 10

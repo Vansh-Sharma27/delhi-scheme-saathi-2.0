@@ -10,43 +10,24 @@ Model: global.amazon.nova-2-lite-v1:0
 This is the primary LLM provider, with Grok as fallback.
 """
 
+import asyncio
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Lock, RLock, Thread
 from typing import Any
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
-from src.config import get_settings
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
 NOVA_MODEL_ID = "global.amazon.nova-2-lite-v1:0"
-
-_inline_executor: ThreadPoolExecutor | None = None
-_background_executor: ThreadPoolExecutor | None = None
-
-
-def _get_executor(priority: str) -> ThreadPoolExecutor:
-    """Return the configured executor for the given task priority."""
-    global _inline_executor, _background_executor
-
-    settings = get_settings()
-    if priority == "background":
-        if _background_executor is None:
-            _background_executor = ThreadPoolExecutor(
-                max_workers=max(1, settings.ai_background_concurrency)
-            )
-        return _background_executor
-
-    if _inline_executor is None:
-        _inline_executor = ThreadPoolExecutor(
-            max_workers=max(1, settings.ai_inline_concurrency)
-        )
-    return _inline_executor
 
 
 class BedrockLLMClient:
@@ -57,9 +38,15 @@ class BedrockLLMClient:
     for multi-turn conversations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         """Initialize Bedrock client with regional configuration."""
-        settings = get_settings()
+        settings = settings if settings is not None else get_settings()
+        self.settings = settings
+        self._executors: dict[str, ThreadPoolExecutor] = {}
+        self._futures: set[Future[Any]] = set()
+        self._closed = False
+        self._state_lock = RLock()
+        self._client_lock = Lock()
         self._config = Config(
             region_name=settings.aws_region,
             read_timeout=60,
@@ -69,6 +56,53 @@ class BedrockLLMClient:
         self._client: Any = None
         self._model_id = settings.bedrock_model or NOVA_MODEL_ID
 
+    def _executor(self, priority: str) -> ThreadPoolExecutor:
+        with self._state_lock:
+            if self._closed:
+                raise RuntimeError("Bedrock client is closed")
+            key = "background" if priority == "background" else "inline"
+            if key not in self._executors:
+                concurrency = (
+                    self.settings.ai_background_concurrency if key == "background"
+                    else self.settings.ai_inline_concurrency
+                )
+                self._executors[key] = ThreadPoolExecutor(max_workers=max(1, concurrency))
+            return self._executors[key]
+
+    async def _run(self, priority: str, operation: Callable[[], Any]) -> Any:
+        with self._state_lock:
+            executor = self._executor(priority)
+            self._futures = {future for future in self._futures if not future.done()}
+            future = executor.submit(operation)
+            self._futures.add(future)
+        return await asyncio.wrap_future(future)
+
+    async def close(self) -> None:
+        with self._state_lock:
+            if self._closed:
+                return
+            self._closed = True
+            pending = any(not future.done() for future in self._futures)
+        if pending:
+            # asyncio's default executor would make Runner exit wait for boto3.
+            Thread(target=self._finish_close, name="bedrock-close", daemon=True).start()
+        else:
+            self._finish_close()
+
+    def _finish_close(self) -> None:
+        for executor in self._executors.values():
+            executor.shutdown(wait=True, cancel_futures=True)
+        self._executors.clear()
+        self._futures.clear()
+        # A running worker may construct the lazy client after close() returns.
+        if self._client is not None:
+            try:
+                self._client.close()
+            except Exception:
+                logger.exception("Failed to close Bedrock runtime client")
+            finally:
+                self._client = None
+
     def _runtime(self) -> Any:
         """Return the boto3 runtime client, creating it on first use.
 
@@ -76,9 +110,10 @@ class BedrockLLMClient:
         eagerly. Instantiating this class must stay cheap and credential-free
         so the Grok fallback path works where AWS is not configured.
         """
-        if self._client is None:
-            self._client = boto3.client("bedrock-runtime", config=self._config)
-        return self._client
+        with self._client_lock:
+            if self._client is None:
+                self._client = boto3.client("bedrock-runtime", config=self._config)
+            return self._client
 
     async def analyze_message(
         self,
@@ -106,8 +141,6 @@ class BedrockLLMClient:
         Returns:
             dict with intent, life_event, extracted_fields, language, etc.
         """
-        import asyncio
-
         # Build messages for Converse API format
         messages = []
 
@@ -242,9 +275,8 @@ Respond with ONLY the JSON object, no other text.
 
         try:
             # Run synchronous boto3 call in thread pool
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                _get_executor(priority),
+            response = await self._run(
+                priority,
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": system_prompt}],
@@ -296,8 +328,6 @@ Respond with ONLY the JSON object, no other text.
         priority: str = "inline",
     ) -> dict[str, Any]:
         """Ask Bedrock to sanity-check deterministic scheme candidates."""
-        import asyncio
-
         language_label = {
             "hi": "Hindi (Devanagari)",
             "en": "English",
@@ -356,9 +386,8 @@ Rules:
         messages.append({"role": "user", "content": [{"text": prompt}]})
 
         try:
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                _get_executor(priority),
+            response = await self._run(
+                priority,
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": "You audit relevance between user needs and deterministic scheme candidates."}],
@@ -403,8 +432,6 @@ Rules:
         Returns:
             Generated response text
         """
-        import asyncio
-
         generation_prompt = f"""
 Generate a helpful, empathetic response in {'Hindi' if user_language == 'hi' else 'English' if user_language == 'en' else 'Hinglish (mix of Hindi and English)'}.
 
@@ -429,9 +456,8 @@ Generate response:
         }]
 
         try:
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                _get_executor(priority),
+            response = await self._run(
+                priority,
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": system_prompt}],
@@ -470,8 +496,6 @@ Generate response:
         Returns:
             Updated conversation summary
         """
-        import asyncio
-
         summary_prompt = f"""
 Summarize this conversation, focusing on:
 - User's life situation and needs
@@ -494,9 +518,8 @@ Provide a 2-3 sentence summary in English:
         }]
 
         try:
-            loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
-                _get_executor(priority),
+            response = await self._run(
+                priority,
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{
@@ -521,15 +544,3 @@ Provide a 2-3 sentence summary in English:
         except Exception as e:
             logger.error("Bedrock summarization failed: %s", e)
             return current_summary or ""
-
-
-# Singleton instance
-_bedrock_client: BedrockLLMClient | None = None
-
-
-def get_bedrock_client() -> BedrockLLMClient:
-    """Get or create Bedrock LLM client singleton."""
-    global _bedrock_client
-    if _bedrock_client is None:
-        _bedrock_client = BedrockLLMClient()
-    return _bedrock_client

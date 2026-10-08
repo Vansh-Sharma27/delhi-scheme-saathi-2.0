@@ -7,8 +7,19 @@ from unittest.mock import patch
 import pytest
 
 from scripts import fork_session
-from src.db.session_store import InMemorySessionStore
-from src.models.session import ConversationState, Message, Session, UserProfile
+from src.dss.bootstrap.sessions import build_session_store
+from src.dss.domain.conversations.session import Message, Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
+from src.dss.settings import CHAT_SESSION_PREFIX
+
+
+def test_fork_shares_canonical_prefix_and_existing_store_wiring() -> None:
+    assert CHAT_SESSION_PREFIX == "api:"
+    assert fork_session.CHAT_SESSION_PREFIX is CHAT_SESSION_PREFIX
+    assert fork_session.build_session_store is build_session_store
+    assert fork_session.build_session_store.__module__ == "src.dss.bootstrap.sessions"
 
 
 class _FakeStore:
@@ -41,8 +52,8 @@ def _telegram_session(user_id: str = "780045592") -> Session:
 def store():
     """A populated fake store wired into the script."""
     fake = _FakeStore()
-    with patch.object(fork_session, "_configure_session_store", lambda: None), patch.object(
-        fork_session, "get_session_store", lambda: fake
+    with patch.object(
+        fork_session, "build_session_store", lambda settings: fake
     ):
         yield fake
 
@@ -141,7 +152,7 @@ async def test_show_omits_raw_messages_unless_requested(
 
 def test_in_memory_store_fails_loudly() -> None:
     """A per-process store cannot see the app's sessions; say so, don't 404."""
-    with patch.object(fork_session, "_configure_session_store", lambda: None), patch.object(
-        fork_session, "get_session_store", lambda: InMemorySessionStore()
+    with patch.object(
+        fork_session, "build_session_store", lambda settings: InMemorySessionStore()
     ), pytest.raises(SystemExit):
         fork_session._require_shared_store()

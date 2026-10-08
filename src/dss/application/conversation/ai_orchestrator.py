@@ -8,7 +8,6 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from time import perf_counter
 from typing import Any, TypeVar, cast
 
 from src.dss.application.conversation.memory import build_working_memory, working_memory_payload
@@ -17,17 +16,8 @@ from src.dss.domain.conversations.session import ConversationMemory, Session
 from src.dss.domain.schemes.scheme import SchemeMatch
 from src.dss.observability.llm_usage import LLMUsageEvent as LLMUsageEvent
 from src.dss.observability.llm_usage import log_llm_usage
+from src.dss.settings import Settings
 
-
-def _unconfigured_settings(*args: Any, **kwargs: Any) -> Any:
-    raise RuntimeError("Application settings provider has not been configured")
-
-
-get_settings: Callable[[], Any] = _unconfigured_settings
-get_llm_client: Callable[[], LLMProvider] = _unconfigured_settings
-safe_analysis_payload: Callable[[str], dict[str, Any]] = _unconfigured_settings
-safe_relevance_payload: Callable[[list[dict[str, Any]]], dict[str, Any]] = _unconfigured_settings
-safe_generation_text: Callable[[str], str] = _unconfigured_settings
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -67,13 +57,20 @@ class AIOrchestrator:
 
     def __init__(
         self,
-        llm_client: LLMProvider | None = None,
+        llm_client: LLMProvider,
         *,
+        settings: Settings,
+        safe_analysis: Callable[[str], dict[str, Any]],
+        safe_relevance: Callable[[list[dict[str, Any]]], dict[str, Any]],
+        safe_generation: Callable[[str], str],
         policies: Mapping[AITaskType, AIExecutionPolicy] | None = None,
         usage_sink: Callable[[LLMUsageEvent], None] | None = None,
     ) -> None:
-        self.settings = get_settings()
-        self.llm_client = llm_client or get_llm_client()
+        self.settings = settings
+        self.llm_client = llm_client
+        self.safe_analysis = safe_analysis
+        self.safe_relevance = safe_relevance
+        self.safe_generation = safe_generation
         self._policies = dict(self._POLICIES)
         if policies:
             self._policies.update(policies)
@@ -112,29 +109,6 @@ class AIOrchestrator:
         if self._usage_sink is not None:
             self._usage_sink(event)
         log_llm_usage(event, logger)
-
-    def _get_instance_override(self, method_name: str) -> Callable[..., Any] | None:
-        """Return an instance-level monkeypatch for backward-compatible tests."""
-        return getattr(self.llm_client, "__dict__", {}).get(method_name)
-
-    async def _call_public_override(
-        self,
-        method_name: str,
-        **kwargs: Any,
-    ) -> ProviderExecutionResult[Any]:
-        """Execute an instance-level monkeypatched public LLM method."""
-        override = self._get_instance_override(method_name)
-        if override is None:
-            raise RuntimeError(f"No override found for {method_name}")
-
-        started = perf_counter()
-        output = await override(**kwargs)
-        return ProviderExecutionResult(
-            output=output,
-            provider=None,
-            fallback_used=False,
-            latency_ms=(perf_counter() - started) * 1000,
-        )
 
     async def _run_task(
         self,
@@ -178,12 +152,9 @@ class AIOrchestrator:
         second_score = matches[1].deterministic_score if len(matches) > 1 else 0.0
         score_gap = top_score - second_score
 
-        return cast(
-            bool,
-            (
-                top_score <= self.settings.ai_relevance_min_deterministic_score
-                or score_gap < self.settings.ai_relevance_score_gap_threshold
-            ),
+        return (
+            top_score <= self.settings.ai_relevance_min_deterministic_score
+            or score_gap < self.settings.ai_relevance_score_gap_threshold
         )
 
     async def analyze_message(
@@ -212,33 +183,17 @@ class AIOrchestrator:
             task_type=AITaskType.ANALYZE_MESSAGE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "analyze_message",
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=user_profile,
-                        system_prompt=system_prompt,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("analyze_message") is not None
-                    else self.llm_client.analyze_message_with_meta(
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=user_profile,
-                        system_prompt=system_prompt,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.analyze_message_with_meta(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                current_state=session.state.value,
+                user_profile=user_profile,
+                system_prompt=system_prompt,
+                session_language=session_language,
+                working_memory=memory,
+                priority=cast(TaskPriority, priority),
             ),
-            safe_output=lambda: safe_analysis_payload(session_language),
+            safe_output=lambda: self.safe_analysis(session_language),
         )
 
     async def judge_scheme_relevance(
@@ -264,33 +219,17 @@ class AIOrchestrator:
             task_type=AITaskType.JUDGE_SCHEME_RELEVANCE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "judge_scheme_relevance",
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=session.user_profile.model_dump(),
-                        candidate_schemes=candidate_schemes,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("judge_scheme_relevance") is not None
-                    else self.llm_client.judge_scheme_relevance_with_meta(
-                        user_message=user_message,
-                        conversation_history=conversation_history,
-                        current_state=session.state.value,
-                        user_profile=session.user_profile.model_dump(),
-                        candidate_schemes=candidate_schemes,
-                        session_language=session_language,
-                        working_memory=memory,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.judge_scheme_relevance_with_meta(
+                user_message=user_message,
+                conversation_history=conversation_history,
+                current_state=session.state.value,
+                user_profile=session.user_profile.model_dump(),
+                candidate_schemes=candidate_schemes,
+                session_language=session_language,
+                working_memory=memory,
+                priority=cast(TaskPriority, priority),
             ),
-            safe_output=lambda: safe_relevance_payload(candidate_schemes),
+            safe_output=lambda: self.safe_relevance(candidate_schemes),
         )
 
     async def generate_response(
@@ -317,25 +256,13 @@ class AIOrchestrator:
             task_type=AITaskType.GENERATE_RESPONSE,
             session_id=session.user_id,
             prompt_chars=prompt_chars,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "generate_response",
-                        context=enriched_context,
-                        system_prompt=system_prompt,
-                        user_language=user_language,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("generate_response") is not None
-                    else self.llm_client.generate_response_with_meta(
-                        context=enriched_context,
-                        system_prompt=system_prompt,
-                        user_language=user_language,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.generate_response_with_meta(
+                context=enriched_context,
+                system_prompt=system_prompt,
+                user_language=user_language,
+                priority=cast(TaskPriority, priority),
             ),
-            safe_output=lambda: safe_generation_text(user_language),
+            safe_output=lambda: self.safe_generation(user_language),
         )
 
     async def refresh_working_memory(
@@ -358,21 +285,10 @@ class AIOrchestrator:
             session_id=session.user_id,
             prompt_chars=prompt_chars,
             queue_lag_ms=queue_lag_ms,
-            call=(
-                lambda priority: (
-                    self._call_public_override(
-                        "summarize_conversation",
-                        messages=messages,
-                        current_summary=session.working_memory.summary,
-                        priority=cast(TaskPriority, priority),
-                    )
-                    if self._get_instance_override("summarize_conversation") is not None
-                    else self.llm_client.summarize_conversation_with_meta(
-                        messages=messages,
-                        current_summary=session.working_memory.summary,
-                        priority=cast(TaskPriority, priority),
-                    )
-                )
+            call=lambda priority: self.llm_client.summarize_conversation_with_meta(
+                messages=messages,
+                current_summary=session.working_memory.summary,
+                priority=cast(TaskPriority, priority),
             ),
             safe_output=lambda: session.working_memory.summary or "",
         )
@@ -381,20 +297,3 @@ class AIOrchestrator:
         if refreshed == session.working_memory:
             return session.working_memory
         return refreshed
-
-
-_ai_orchestrator: AIOrchestrator | None = None
-
-
-def configure_ai_orchestrator(orchestrator: AIOrchestrator | None) -> None:
-    """Override the shared AI orchestrator instance."""
-    global _ai_orchestrator
-    _ai_orchestrator = orchestrator
-
-
-def get_ai_orchestrator() -> AIOrchestrator:
-    """Return the shared AI orchestrator singleton."""
-    global _ai_orchestrator
-    if _ai_orchestrator is None:
-        _ai_orchestrator = AIOrchestrator()
-    return _ai_orchestrator

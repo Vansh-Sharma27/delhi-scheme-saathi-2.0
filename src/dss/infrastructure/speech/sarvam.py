@@ -17,13 +17,13 @@ import logging
 
 import httpx
 
-from src.config import get_settings
 from src.dss.application.ports.speech import (
     STTResult as STTResult,
 )
 from src.dss.application.ports.speech import (
     TTSResult as TTSResult,
 )
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +65,13 @@ class SarvamClient:
         "od": "od-IN",
     }
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, *, settings: Settings | None = None):
         """Initialize Sarvam AI client.
 
         Args:
             api_key: Sarvam AI API subscription key; falls back to settings
         """
-        self.api_key = api_key or get_settings().sarvam_api_key
+        self.api_key = api_key or (settings if settings is not None else get_settings()).sarvam_api_key
         self._http_client: httpx.AsyncClient | None = None
 
     def is_available(self) -> bool:
@@ -276,30 +276,3 @@ class SarvamClient:
         if devanagari_ratio > 0.3:
             return "hi"
         return "en"
-
-
-# Singleton instance
-_sarvam_client: SarvamClient | None = None
-
-
-def get_sarvam_client() -> SarvamClient:
-    """Get singleton Sarvam client instance."""
-    global _sarvam_client
-    if _sarvam_client is None:
-        _sarvam_client = SarvamClient()
-    return _sarvam_client
-
-
-def configure_sarvam_client(api_key: str | None = None) -> SarvamClient:
-    """Configure and return Sarvam client."""
-    global _sarvam_client
-    old = _sarvam_client
-    _sarvam_client = SarvamClient(api_key=api_key)
-    if old is not None:
-        import asyncio
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(old.close())
-        except RuntimeError:
-            pass  # No running loop (startup context); old client has no open connections yet
-    return _sarvam_client

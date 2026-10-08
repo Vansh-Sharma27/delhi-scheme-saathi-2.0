@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import httpx
 from dotenv import load_dotenv
 
-from src.integrations.telegram import DEFAULT_BOT_COMMANDS
+from src.dss.infrastructure.telegram import DEFAULT_BOT_COMMANDS
 
 
 async def set_webhook(token: str, url: str) -> None:

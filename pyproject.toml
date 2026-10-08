@@ -45,6 +45,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/dss/infrastructure/ai/prompts/analysis_system_prompt.txt" = "src/dss/infrastructure/ai/prompts/analysis_system_prompt.txt"
+"src/dss/infrastructure/ai/prompts/generate_response.txt" = "src/dss/infrastructure/ai/prompts/generate_response.txt"
+"src/dss/infrastructure/ai/prompts/system_prompt.txt" = "src/dss/infrastructure/ai/prompts/system_prompt.txt"
+"data/all_schemes.json" = "data/all_schemes.json"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
@@ -72,16 +78,17 @@ root_package = "src"
 name = "Conversation package one-way dependency order (ADR-0004)"
 type = "layers"
 layers = [
-    "src.services.conversation.service",
-    "src.services.conversation.views",
-    "src.services.conversation.turn_policy",
-    "src.services.conversation.intents",
-    "src.services.conversation.scheme_reference",
-    "src.services.conversation.language",
+    "src.dss.application.conversation.service",
+    "src.dss.application.conversation.views",
+    "src.dss.application.conversation.view_formatting",
+    "src.dss.application.conversation.turn_policy",
+    "src.dss.application.conversation.intents",
+    "src.dss.application.conversation.scheme_reference",
+    "src.dss.application.conversation.language",
 ]
-# This contract intentionally governs only the six named conversation modules.
+# This contract intentionally governs only the seven named conversation modules.
 # Imports to modules outside this package are not constrained by this layer rule.
-ignore_unimported_packages = true
+ignore_unimported_packages = false
 
 [[tool.importlinter.contracts]]
 name = "Modular monolith layer dependency direction (Phase 1 scaffolding)"
@@ -118,20 +125,11 @@ containers = ["src.dss"]
 #  - This contract walks downstream through non-layer modules. A `src.dss`
 #    module importing a legacy `src.*` module whose dependency closure re-enters
 #    `src.dss` at a layer STRICTLY ABOVE the importer fails the contract with
-#    the full chain in the message. Today the facade at
-#    `src.models.rejection_rule` -> `src.dss.domain.schemes.rejection_rule`
-#    creates one such re-entry edge, so any importer below `domain` that
-#    touches `src.main` (which imports `src.models.api` -> `src.models.rejection_rule`)
-#    already fails. Each facade added in Phases 2-4 plants a new re-entry edge,
-#    so the net widens each phase.
+#    the full chain in the message.
 #  - The remaining blind spots are `bootstrap` (the top layer, nothing above
 #    it) and the unlisted container root `src.dss.__init__`. Both are empty
 #    until Phase 6. The `forbidden` contract below closes `bootstrap` and the
 #    root against legacy `src.*` imports.
-#  - Phase 6 landmine (spec 7.7): `CHAT_SESSION_PREFIX` moves into
-#    `src/dss/settings.py`. A transient `from src.main import
-#    CHAT_SESSION_PREFIX` inside `src.dss.settings` fails this gate today
-#    (proven). The Phase 6 agent must copy the constant, never import it.
 #
 # Interfaces and application services still reach infrastructure during the
 # transition. Infrastructure imports domain values; eligibility evaluation
@@ -150,28 +148,20 @@ ignore_unimported_packages = true
 [[tool.importlinter.contracts]]
 name = "No new src.dss code imports legacy src.* wiring (Phase 1 scaffolding)"
 type = "forbidden"
-source_modules = ["src.dss.bootstrap", "src.dss"]
+source_modules = ["src.dss"]
 # `src.**` matches every module under `src` including `src.dss.*`; the
 # contract skips overlapping pairs (a source module is not forbidden from
 # importing itself or its own descendants), so self-imports inside `src.dss`
 # are unaffected. This closes the two blind spots the layers contract leaves:
 # `bootstrap` (top layer, nothing above it to re-enter) and the unlisted
-# container root `src.dss.__init__`. It is green today because both are empty.
+# container root `src.dss.__init__`. The ancestor includes bootstrap: listing
+# bootstrap separately would also forbid its legitimate canonical siblings.
 # Indirect imports are checked, so a `bootstrap` module that imports a legacy
 # module which in turn imports `src.dss.*` also fails.
 forbidden_modules = ["src.**"]
 allow_indirect_imports = false
-# Phase 4 interim state: adapters relocated into src.dss.infrastructure still
-# read application settings through the legacy `src.config.get_settings()`
-# singletons (spec 4.6). Every other legacy import under src.dss remains a
-# violation: the entries below are the complete set of tolerated edges, listed
-# so that a reviewer sees each one and Phase 6 (which moves settings into
-# src.dss.settings and switches to constructor injection) deletes them. An
-# entry that stops matching any import in the graph fails the contract at
-# error level, so the list cannot outlive the edges it permits.
-ignore_imports = [
-    "src.dss.infrastructure.** -> src.config",
-]
+# Phase 6 settings migration: all adapters now read src.dss.settings directly.
+# No legacy settings exception remains; all four contracts still apply.
 unmatched_ignore_imports_alerting = "error"
 
 [[tool.importlinter.contracts]]

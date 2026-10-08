@@ -1,9 +1,9 @@
 """Response language selection and script detection."""
 
 import re
-from collections.abc import Callable
-from typing import Any, cast
+from collections.abc import Awaitable, Callable
 
+from src.dss.application.ports.ai_tasks import AITasks
 from src.dss.domain.conversations.session import Session
 
 
@@ -136,7 +136,7 @@ async def _rewrite_response_language(
     text: str,
     language: str,
     *,
-    get_ai_orchestrator: Any,
+    get_ai_orchestrator: Callable[[], AITasks],
     safe_generation_text: Callable[[str], str],
 ) -> str:
     """Rewrite a response using the shared Bedrock/Grok translation path."""
@@ -160,7 +160,7 @@ async def _rewrite_response_language(
     if translated.strip() == safe_fallback.strip():
         return text
 
-    return cast(str, translated.strip())
+    return translated.strip()
 
 
 async def ensure_response_language(
@@ -168,13 +168,13 @@ async def ensure_response_language(
     text: str,
     language: str,
     *,
-    rewrite: Any,
+    rewrite: Callable[[Session, str, str], Awaitable[str]],
 ) -> str:
     """Rewrite a reply into the requested language when it drifted off target."""
     if not text.strip() or not _needs_language_normalization(text, language):
         return text
 
-    return cast(str, await rewrite(session, text, language))
+    return await rewrite(session, text, language)
 
 
 async def translate_grounded_text_if_needed(
@@ -182,7 +182,7 @@ async def translate_grounded_text_if_needed(
     text: str,
     language: str,
     *,
-    rewrite: Any,
+    rewrite: Callable[[Session, str, str], Awaitable[str]],
 ) -> str:
     """Faithfully translate grounded text when the target language needs it.
 
@@ -192,4 +192,4 @@ async def translate_grounded_text_if_needed(
     """
     if not text.strip() or not _needs_grounded_translation(text, language):
         return text
-    return cast(str, await rewrite(session, text, language))
+    return await rewrite(session, text, language)

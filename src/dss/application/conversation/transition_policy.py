@@ -1,8 +1,10 @@
 """Application policy for choosing the next conversation state."""
 
-from typing import Any
-
+from src.dss.application.conversation import fsm, intents, scheme_reference, turn_policy
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.models import ProfileUpdate, TurnAnalysis
+from src.dss.application.conversation.profile_fields import ProfileFields
+from src.dss.application.ports.responses import Responses
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 
@@ -10,19 +12,16 @@ from src.dss.domain.conversations.states import ConversationState
 class TransitionPolicy:
     """Resolve scheme navigation and profile-collection state transitions."""
 
-    @staticmethod
+    def __init__(self, fields: ProfileFields) -> None:
+        self.fields = fields
+
     def decide(
+        self,
         session: Session,
         analysis: TurnAnalysis,
         update: ProfileUpdate,
         user_message: str,
-        *,
-        policies: Any,
     ) -> tuple[ConversationState, ConversationState | None]:
-        fsm = policies.fsm
-        intents = policies.intents
-        scheme_reference = policies.scheme_reference
-        turn_policy = policies.turn_policy
         profile = session.user_profile
         requested_state = turn_policy.requested_scheme_view(
             user_message,
@@ -44,6 +43,7 @@ class TransitionPolicy:
             has_selected_scheme=bool(session.selected_scheme_id),
             action=analysis.action,
             requested_state=requested_state,
+            fields=self.fields,
         )
         if (
             next_state == ConversationState.SCHEME_MATCHING
@@ -57,6 +57,7 @@ class TransitionPolicy:
             matching_inputs_changed=update.matching_inputs_changed,
             action=analysis.action,
             requested_state=requested_state,
+            fields=self.fields,
         ):
             next_state = ConversationState.SCHEME_MATCHING
         if (
@@ -74,10 +75,8 @@ class TransitionPolicy:
 
     @staticmethod
     def _clear_stale_scheme_state(
-        session: Session, analysis: TurnAnalysis, update: ProfileUpdate, *, policies: Any
+        session: Session, analysis: TurnAnalysis, update: ProfileUpdate
     ) -> Session:
-        session_manager = policies.session_manager
-        turn_policy = policies.turn_policy
         session = session_manager.set_awaiting_profile_change(session, False)
         session = session_manager.set_skipped_fields(
             session, [f for f in session.skipped_fields if f not in update.changed_fields]
@@ -103,8 +102,7 @@ class TransitionPolicy:
         lang: str,
         language_changed: bool,
         *,
-        policies: Any,
-        responses: Any,
+        responses: Responses,
     ) -> tuple[Session, str] | None:
         if (
             language_changed
@@ -114,10 +112,10 @@ class TransitionPolicy:
         ):
             return session, responses.generate_greeting_response(lang)
         if analysis.action == "start_over":
-            session = policies.session_manager.reset_session(session, preserve_language=True)
+            session = session_manager.reset_session(session, preserve_language=True)
             return session, responses.generate_greeting_response(lang)
         if analysis.intent == "goodbye" or analysis.action == "goodbye":
             text = responses.generate_farewell_response(lang)
-            session = policies.session_manager.reset_session(session, preserve_language=True)
+            session = session_manager.reset_session(session, preserve_language=True)
             return session, text
         return None

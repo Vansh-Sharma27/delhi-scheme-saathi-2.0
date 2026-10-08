@@ -1,10 +1,15 @@
 """Deterministic commands and inline-keyboard callbacks."""
 
-from typing import Any
-
+from src.dss.application.conversation import language, scheme_reference
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.contracts import ChatResponse
+from src.dss.application.conversation.keyboards import format_language_keyboard
 from src.dss.application.conversation.language_policy import LanguagePolicy
 from src.dss.application.conversation.persistence import TurnPersistence
+from src.dss.application.conversation.turn_renderer import TurnRenderer
+from src.dss.application.conversation.views import SchemeViews
+from src.dss.application.ports.responses import Responses
+from src.dss.application.ports.session_repository import SessionStore
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 
@@ -15,16 +20,16 @@ _CALLBACK_SCHEME_PREFIX = "scheme:"
 class CommandHandler:
     def __init__(
         self,
-        pool: Any,
-        renderer: Any,
+        renderer: TurnRenderer,
         persistence: TurnPersistence,
         *,
-        dependencies: Any,
-        session_store: Any,
+        responses: Responses,
+        views: SchemeViews,
+        session_store: SessionStore,
     ) -> None:
-        self.pool = pool
         self.renderer = renderer
-        self.dependencies = dependencies
+        self.responses = responses
+        self.views = views
         self.session_store = session_store
         self._build_command_response = persistence._build_command_response
 
@@ -36,26 +41,26 @@ class CommandHandler:
     ) -> ChatResponse:
         """Answer /start, /help and /language without calling the LLM."""
         if command == "start":
-            session = self.dependencies.session_manager.reset_session(session)
+            session = session_manager.reset_session(session)
             lang = session.language_preference if session.language_preference != "auto" else "hi"
             return await self._build_command_response(
                 session,
                 user_message=user_message,
-                response_text=self.dependencies.response_generator.generate_greeting_response(lang),
+                response_text=self.responses.generate_greeting_response(lang),
                 language=lang,
             )
 
         if command == "help":
-            response_text = self.dependencies.response_generator.generate_help_response(
+            response_text = self.responses.generate_help_response(
                 session.language_preference,
                 has_active_scheme=bool(
                     session.selected_scheme_id
-                    and session.state in self.dependencies.scheme_reference.SCHEME_CONTEXT_STATES
+                    and session.state in scheme_reference.SCHEME_CONTEXT_STATES
                 ),
             )
         else:
             response_text = (
-                self.dependencies.response_generator.generate_language_selection_response(
+                self.responses.generate_language_selection_response(
                     session.language_preference
                 )
             )
@@ -64,8 +69,8 @@ class CommandHandler:
             session,
             user_message=user_message,
             response_text=response_text,
-            language=self.dependencies.language.command_response_language(session),
-            inline_keyboard=self.dependencies.format_language_keyboard(session.language_preference),
+            language=language.command_response_language(session),
+            inline_keyboard=format_language_keyboard(session.language_preference),
         )
 
     async def _handle_callback(
@@ -102,13 +107,13 @@ class CommandHandler:
         lang: str,
     ) -> ChatResponse:
         """Switch language and re-render the user's current context in it."""
-        if requested_language not in self.dependencies.language.SUPPORTED_LANGUAGES:
+        if requested_language not in language.SUPPORTED_LANGUAGES:
             return ChatResponse(
                 text="अमान्य भाषा चयन।" if lang == "hi" else "Invalid language selection.",
                 language=lang,
             )
 
-        session = self.dependencies.session_manager.set_language(
+        session = session_manager.set_language(
             session, requested_language, locked=True
         )
         state_text, inline_keyboard = await self.renderer.snapshot(
@@ -116,11 +121,11 @@ class CommandHandler:
             requested_language,
         )
         response_text = (
-            self.dependencies.response_generator.generate_language_changed_response(
+            self.responses.generate_language_changed_response(
                 requested_language,
                 has_active_scheme=bool(
                     session.selected_scheme_id
-                    and session.state in self.dependencies.scheme_reference.SCHEME_CONTEXT_STATES
+                    and session.state in scheme_reference.SCHEME_CONTEXT_STATES
                 ),
             )
             + "\n\n"
@@ -130,13 +135,13 @@ class CommandHandler:
             session,
             response_text,
             requested_language,
-            responses=self.dependencies.response_generator,
+            responses=self.responses,
         )
 
-        session = await self.dependencies.session_manager.add_message(
+        session = await session_manager.add_message(
             session, "assistant", response_text
         )
-        await self.dependencies.session_manager.save_session(session, store=self.session_store)
+        await session_manager.save_session(session, store=self.session_store)
 
         return ChatResponse(
             text=response_text,
@@ -152,25 +157,25 @@ class CommandHandler:
         lang: str,
     ) -> ChatResponse:
         """Open the scheme behind a tapped button."""
-        session = self.dependencies.session_manager.select_scheme(session, scheme_id)
-        session = self.dependencies.session_manager.update_state(
+        session = session_manager.select_scheme(session, scheme_id)
+        session = session_manager.update_state(
             session, ConversationState.SCHEME_DETAILS
         )
 
-        response_text = await self.dependencies.views.build_scheme_details_text(
-            self.pool, scheme_id, session.user_profile, lang
+        response_text = await self.views.build_scheme_details_text(
+            scheme_id, session.user_profile, lang
         )
         response_text = await LanguagePolicy.enforce(
             session,
             response_text,
             lang,
-            responses=self.dependencies.response_generator,
+            responses=self.responses,
         )
 
-        session = await self.dependencies.session_manager.add_message(
+        session = await session_manager.add_message(
             session, "assistant", response_text
         )
-        await self.dependencies.session_manager.save_session(session, store=self.session_store)
+        await session_manager.save_session(session, store=self.session_store)
 
         return ChatResponse(
             text=response_text,

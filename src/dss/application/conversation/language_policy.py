@@ -1,8 +1,9 @@
 """Application policy for settling a turn's response language."""
 
-from typing import Any, cast
-
+from src.dss.application.conversation import language
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.models import TurnAnalysis
+from src.dss.application.ports.responses import Responses
 from src.dss.domain.conversations.session import Session
 
 
@@ -10,16 +11,14 @@ class LanguagePolicy:
     """Apply explicit locks and unlocked language observations to a session."""
 
     @staticmethod
-    async def enforce(session: Session, text: str, language: str, *, responses: Any) -> str:
+    async def enforce(session: Session, text: str, language: str, *, responses: Responses) -> str:
         """Apply the shared localization path before a reply is persisted."""
-        return cast(str, await responses.ensure_response_language(session, text, language))
+        return await responses.ensure_response_language(session, text, language)
 
     @staticmethod
     def resolve(
-        session: Session, analysis: TurnAnalysis, *, policies: Any
+        session: Session, analysis: TurnAnalysis
     ) -> tuple[Session, str, bool]:
-        session_manager = policies.session_manager
-        language = policies.language
         if analysis.explicit_language:
             language_changed = session.language_preference != analysis.explicit_language
             session = session_manager.set_language(session, analysis.explicit_language, locked=True)

@@ -1,42 +1,31 @@
 """Tests for LLM and embedding fallback behavior."""
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
-from src.config import get_settings
+from src.dss.application.matching.scheme_matcher import SchemeMatcher
+from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.profiles.profile import UserProfile
 from src.dss.infrastructure.ai import (
     bedrock_client,
     grok_client,
 )
 from src.dss.infrastructure.ai import (
-    fallback_client as llm_fallback_client,
+    fallback_client as llm_client,
 )
-from src.dss.infrastructure.embeddings import fallback_client, jina_client
-from src.integrations import embedding_client, llm_client
-from src.models.session import UserProfile
-from src.prompts.loader import get_analysis_system_prompt, get_system_prompt
-from src.services import scheme_matcher
-
-
-@pytest.fixture(autouse=True)
-def _reset_singletons() -> None:
-    """Reset cached/singleton state between tests.
-
-    The adapter singletons moved to the canonical Phase 3 modules, so the resets target those modules. `llm_client` and `embedding_client` stay imported for the re-exported class names the tests below use.
-    """
-    get_settings.cache_clear()
-    llm_fallback_client._llm_client = None
-    jina_client._jina_client = None
-    fallback_client._embedding_client = None
+from src.dss.infrastructure.ai.prompts.loader import get_analysis_system_prompt, get_system_prompt
+from src.dss.infrastructure.embeddings import (
+    fallback_client as embedding_client,
+)
+from src.dss.settings import Settings
 
 
 @pytest.mark.asyncio
-async def test_llm_falls_back_from_bedrock_to_grok(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_llm_falls_back_from_bedrock_to_grok() -> None:
     """Bedrock failure should use Grok as fallback."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True, xai_api_key="xai-test")
 
     calls: list[str] = []
 
@@ -58,10 +47,7 @@ async def test_llm_falls_back_from_bedrock_to_grok(monkeypatch: pytest.MonkeyPat
                 "clarification_question": None,
             }
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", FakeBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", FakeGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(settings, bedrock=FakeBedrock, grok=FakeGrok)
     result = await client.analyze_message(
         user_message="मुझे घर चाहिए",
         conversation_history=[],
@@ -75,13 +61,9 @@ async def test_llm_falls_back_from_bedrock_to_grok(monkeypatch: pytest.MonkeyPat
 
 
 @pytest.mark.asyncio
-async def test_llm_returns_safe_defaults_when_all_providers_fail(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_llm_returns_safe_defaults_when_all_providers_fail() -> None:
     """When Bedrock and Grok both fail, wrapper should return safe fallback payload."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True, xai_api_key="xai-test")
 
     class AlwaysFailBedrock:
         async def analyze_message(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -91,10 +73,7 @@ async def test_llm_returns_safe_defaults_when_all_providers_fail(
         async def analyze_message(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(settings, bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.analyze_message(
         user_message="hello",
         conversation_history=[],
@@ -109,13 +88,9 @@ async def test_llm_returns_safe_defaults_when_all_providers_fail(
 
 
 @pytest.mark.asyncio
-async def test_llm_generate_response_safe_fallback_when_all_providers_fail(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_llm_generate_response_safe_fallback_when_all_providers_fail() -> None:
     """When both providers fail for response generation, wrapper returns user-safe message."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True, xai_api_key="xai-test")
 
     class AlwaysFailBedrock:
         async def generate_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -125,10 +100,7 @@ async def test_llm_generate_response_safe_fallback_when_all_providers_fail(
         async def generate_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(settings, bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.generate_response(
         context={},
         system_prompt="test",
@@ -139,13 +111,9 @@ async def test_llm_generate_response_safe_fallback_when_all_providers_fail(
 
 
 @pytest.mark.asyncio
-async def test_llm_summarize_returns_current_summary_when_all_providers_fail(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_llm_summarize_returns_current_summary_when_all_providers_fail() -> None:
     """When both providers fail for summarization, wrapper keeps current summary."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True, xai_api_key="xai-test")
 
     class AlwaysFailBedrock:
         async def summarize_conversation(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -155,10 +123,7 @@ async def test_llm_summarize_returns_current_summary_when_all_providers_fail(
         async def summarize_conversation(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(settings, bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.summarize_conversation(
         messages=[{"role": "user", "content": "hello"}],
         current_summary="existing summary",
@@ -168,13 +133,9 @@ async def test_llm_summarize_returns_current_summary_when_all_providers_fail(
 
 
 @pytest.mark.asyncio
-async def test_llm_relevance_judge_returns_safe_defaults_when_all_providers_fail(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_llm_relevance_judge_returns_safe_defaults_when_all_providers_fail() -> None:
     """Relevance judging should degrade safely when both providers fail."""
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True, xai_api_key="xai-test")
 
     class AlwaysFailBedrock:
         async def judge_scheme_relevance(self, *args, **kwargs):  # type: ignore[no-untyped-def]
@@ -184,10 +145,7 @@ async def test_llm_relevance_judge_returns_safe_defaults_when_all_providers_fail
         async def judge_scheme_relevance(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(settings, bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.judge_scheme_relevance(
         user_message="I need housing assistance",
         conversation_history=[],
@@ -205,12 +163,10 @@ async def test_llm_relevance_judge_returns_safe_defaults_when_all_providers_fail
 @pytest.mark.asyncio
 async def test_embedding_falls_back_from_jina_to_voyage(monkeypatch: pytest.MonkeyPatch) -> None:
     """Jina failure should use Voyage embedding as fallback."""
-    monkeypatch.setenv("JINA_API_KEY", "jina-test")
-    monkeypatch.setenv("VOYAGE_API_KEY", "voyage-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, jina_api_key="jina-test", voyage_api_key="voyage-test")
 
     calls: list[str] = []
-    client = embedding_client.FallbackEmbeddingClient()
+    client = embedding_client.FallbackEmbeddingClient(settings)
 
     async def fail_jina(text: str) -> list[float]:
         calls.append("jina")
@@ -232,11 +188,9 @@ async def test_embedding_falls_back_from_jina_to_voyage(monkeypatch: pytest.Monk
 @pytest.mark.asyncio
 async def test_embedding_none_when_all_providers_fail(monkeypatch: pytest.MonkeyPatch) -> None:
     """Embedding wrapper should return None instead of zero vector when both providers fail."""
-    monkeypatch.setenv("JINA_API_KEY", "jina-test")
-    monkeypatch.setenv("VOYAGE_API_KEY", "voyage-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, jina_api_key="jina-test", voyage_api_key="voyage-test")
 
-    client = embedding_client.FallbackEmbeddingClient()
+    client = embedding_client.FallbackEmbeddingClient(settings)
 
     async def fail(*args, **kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("provider unavailable")
@@ -248,9 +202,7 @@ async def test_embedding_none_when_all_providers_fail(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
-async def test_matcher_skips_vector_ranking_on_failed_embedding(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_matcher_skips_vector_ranking_on_failed_embedding() -> None:
     """Scheme matcher should pass None embedding to DB layer when providers fail."""
 
     class FailedEmbeddingClient:
@@ -259,16 +211,19 @@ async def test_matcher_skips_vector_ranking_on_failed_embedding(
 
     captured: dict[str, object] = {}
 
-    async def fake_hybrid_search(*, query_embedding, **kwargs):  # type: ignore[no-untyped-def]
+    async def fake_retrieve_candidates(*, query_embedding, **kwargs):  # type: ignore[no-untyped-def]
         captured["query_embedding"] = query_embedding
         return []
 
-    monkeypatch.setattr(scheme_matcher, "get_embedding_client", lambda: FailedEmbeddingClient())
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
+    repository = AsyncMock(spec=SchemeRepository)
+    repository.retrieve_candidates.side_effect = fake_retrieve_candidates
+    matcher = SchemeMatcher(
+        repository, FailedEmbeddingClient(), lambda sid: [],
+        embedding_dimension=embedding_client.EMBEDDING_DIM,
+    )
 
     profile = UserProfile(life_event="HOUSING")
-    matches = await scheme_matcher.match_schemes(
-        pool=object(),  # type: ignore[arg-type]
+    matches = await matcher.match_schemes(
         profile=profile,
         query_text="मुझे घर चाहिए",
     )
@@ -284,8 +239,7 @@ async def test_grok_generate_response_handles_datetime_context(
     """Grok prompt building should serialize datetime values in context safely."""
     import datetime as dt
 
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, xai_api_key="xai-test")
 
     class FakeCompletions:
         async def create(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -306,7 +260,7 @@ async def test_grok_generate_response_handles_datetime_context(
     class FakeOpenAIClient:
         chat = FakeChat()
 
-    client = grok_client.GrokLLMClient()
+    client = grok_client.GrokLLMClient(settings)
     monkeypatch.setattr(client, "_client", FakeOpenAIClient())
 
     text = await client.generate_response(
@@ -325,10 +279,9 @@ async def test_bedrock_generate_response_handles_datetime_context(
     import asyncio
     import datetime as dt
 
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True)
 
-    client = bedrock_client.BedrockLLMClient()
+    client = bedrock_client.BedrockLLMClient(settings)
 
     class FakeBedrockRuntime:
         def converse(self, **kwargs):  # type: ignore[no-untyped-def]
@@ -359,8 +312,7 @@ async def test_grok_analysis_prompt_allows_direct_entailed_inference(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Grok analysis prompt should allow direct semantic entailment without stereotypes."""
-    monkeypatch.setenv("XAI_API_KEY", "xai-test")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, xai_api_key="xai-test")
 
     captured: dict[str, object] = {}
 
@@ -398,7 +350,7 @@ async def test_grok_analysis_prompt_allows_direct_entailed_inference(
     class FakeOpenAIClient:
         chat = FakeChat()
 
-    client = grok_client.GrokLLMClient()
+    client = grok_client.GrokLLMClient(settings)
     monkeypatch.setattr(client, "_client", FakeOpenAIClient())
 
     await client.analyze_message(
@@ -428,11 +380,10 @@ async def test_bedrock_analysis_prompt_allows_direct_entailed_inference(
     """Bedrock analysis prompt should allow direct semantic entailment without stereotypes."""
     import asyncio
 
-    monkeypatch.setenv("USE_BEDROCK", "true")
-    get_settings.cache_clear()
+    settings = Settings(_env_file=None, use_bedrock=True)
 
     captured: dict[str, object] = {}
-    client = bedrock_client.BedrockLLMClient()
+    client = bedrock_client.BedrockLLMClient(settings)
 
     class FakeBedrockRuntime:
         def converse(self, **kwargs):  # type: ignore[no-untyped-def]

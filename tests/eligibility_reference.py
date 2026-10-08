@@ -1,7 +1,7 @@
 """Independent evaluator frozen from e7f8ae0 before Phase 4 extraction."""
 
-from src.models.scheme import Scheme
-from src.models.session import UserProfile
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import Scheme
 
 INCOME_SEGMENT_ORDER = ("EWS", "LIG", "MIG", "HIG")
 

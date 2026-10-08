@@ -5,27 +5,31 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.integrations.bhashini import (
-    BhashiniClient,
-    STTResult,
-    TTSResult,
-    configure_bhashini_client,
-    get_bhashini_client,
-)
+from src.dss.application.ports.speech import STTResult, TTSResult
+from src.dss.infrastructure.speech.bhashini import BhashiniClient
+from src.dss.settings import Settings
+
+
+@pytest.fixture
+def settings():
+    return Settings(
+        _env_file=None, bhashini_api_key="", bhashini_user_id="", bhashini_ulca_api_key="",
+    )
 
 
 class TestBhashiniClient:
     """Tests for BhashiniClient."""
 
-    def test_client_initialization_without_key(self):
+    def test_client_initialization_without_key(self, settings):
         """Test client initializes without API key."""
-        client = BhashiniClient()
+        client = BhashiniClient(settings=settings)
         assert client.api_key == ""
         assert client.user_id == ""
 
-    def test_client_initialization_with_key(self):
+    def test_client_initialization_with_key(self, settings):
         """Test client initializes with provided API key."""
         client = BhashiniClient(
+            settings=settings,
             api_key="test-api-key",
             user_id="test-user-id",
         )
@@ -37,9 +41,9 @@ class TestSpeechToText:
     """Tests for speech-to-text functionality."""
 
     @pytest.mark.asyncio
-    async def test_stt_without_api_key_returns_placeholder(self):
+    async def test_stt_without_api_key_returns_placeholder(self, settings):
         """Test STT returns placeholder when no API key configured."""
-        client = BhashiniClient(api_key="")
+        client = BhashiniClient(settings=settings)
         result = await client.speech_to_text(
             audio_bytes=b"test audio data",
             source_lang="hi",
@@ -49,9 +53,9 @@ class TestSpeechToText:
         assert "please type" in result.text.lower()
 
     @pytest.mark.asyncio
-    async def test_stt_with_api_key_success(self):
+    async def test_stt_with_api_key_success(self, settings):
         """Test STT with valid API key returns transcription."""
-        client = BhashiniClient(api_key="test-api-key")
+        client = BhashiniClient(api_key="test-api-key", settings=settings)
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -85,11 +89,11 @@ class TestSpeechToText:
             assert result.language == "hi"
 
     @pytest.mark.asyncio
-    async def test_stt_handles_http_error(self):
+    async def test_stt_handles_http_error(self, settings):
         """Test STT handles HTTP errors gracefully."""
         import httpx
 
-        client = BhashiniClient(api_key="test-api-key")
+        client = BhashiniClient(api_key="test-api-key", settings=settings)
 
         with patch.object(client, "_get_client") as mock_get_client:
             mock_http_client = AsyncMock()
@@ -108,9 +112,9 @@ class TestSpeechToText:
             assert "failed" in result.text.lower()
 
     @pytest.mark.asyncio
-    async def test_stt_handles_empty_response(self):
+    async def test_stt_handles_empty_response(self, settings):
         """Test STT handles empty pipeline response."""
-        client = BhashiniClient(api_key="test-api-key")
+        client = BhashiniClient(api_key="test-api-key", settings=settings)
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -135,9 +139,9 @@ class TestTextToSpeech:
     """Tests for text-to-speech functionality."""
 
     @pytest.mark.asyncio
-    async def test_tts_without_api_key_returns_empty(self):
+    async def test_tts_without_api_key_returns_empty(self, settings):
         """Test TTS returns empty bytes when no API key configured."""
-        client = BhashiniClient(api_key="")
+        client = BhashiniClient(settings=settings)
         result = await client.text_to_speech(
             text="नमस्ते",
             target_lang="hi",
@@ -146,9 +150,9 @@ class TestTextToSpeech:
         assert result.audio_bytes == b""
 
     @pytest.mark.asyncio
-    async def test_tts_with_api_key_success(self):
+    async def test_tts_with_api_key_success(self, settings):
         """Test TTS with valid API key returns audio bytes."""
-        client = BhashiniClient(api_key="test-api-key")
+        client = BhashiniClient(api_key="test-api-key", settings=settings)
 
         # Create mock audio content
         audio_content = b"mock audio bytes"
@@ -184,11 +188,11 @@ class TestTextToSpeech:
             assert result.content_type == "audio/wav"
 
     @pytest.mark.asyncio
-    async def test_tts_handles_http_error(self):
+    async def test_tts_handles_http_error(self, settings):
         """Test TTS handles HTTP errors gracefully."""
         import httpx
 
-        client = BhashiniClient(api_key="test-api-key")
+        client = BhashiniClient(api_key="test-api-key", settings=settings)
 
         with patch.object(client, "_get_client") as mock_get_client:
             mock_http_client = AsyncMock()
@@ -209,50 +213,52 @@ class TestLanguageDetection:
     """Tests for language detection."""
 
     @pytest.mark.asyncio
-    async def test_detect_hindi(self):
+    async def test_detect_hindi(self, settings):
         """Test detection of Hindi text."""
-        client = BhashiniClient()
+        client = BhashiniClient(settings=settings)
         lang = await client.detect_language("नमस्ते, मुझे पेंशन चाहिए")
         assert lang == "hi"
 
     @pytest.mark.asyncio
-    async def test_detect_english(self):
+    async def test_detect_english(self, settings):
         """Test detection of English text."""
-        client = BhashiniClient()
+        client = BhashiniClient(settings=settings)
         lang = await client.detect_language("Hello, I need pension information")
         assert lang == "en"
 
     @pytest.mark.asyncio
-    async def test_detect_hinglish_defaults_to_hindi(self):
+    async def test_detect_hinglish_defaults_to_hindi(self, settings):
         """Test Hinglish text defaults to Hindi."""
-        client = BhashiniClient()
+        client = BhashiniClient(settings=settings)
         # Hinglish with <30% Devanagari should detect as English
         lang = await client.detect_language("Mujhe pension chahiye please")
         assert lang == "en"
 
     @pytest.mark.asyncio
-    async def test_detect_empty_defaults_to_hindi(self):
+    async def test_detect_empty_defaults_to_hindi(self, settings):
         """Test empty text defaults to Hindi."""
-        client = BhashiniClient()
+        client = BhashiniClient(settings=settings)
         lang = await client.detect_language("123 456")
         assert lang == "hi"
 
 
-class TestSingleton:
-    """Tests for singleton pattern."""
-
-    def test_get_bhashini_client_returns_same_instance(self):
-        """Test get_bhashini_client returns singleton."""
-        client1 = get_bhashini_client()
-        client2 = get_bhashini_client()
-        assert client1 is client2
-
-    def test_configure_bhashini_client_creates_new_instance(self):
-        """Test configure_bhashini_client replaces singleton."""
-        original = get_bhashini_client()
-        new_client = configure_bhashini_client(api_key="new-key")
-        latest = get_bhashini_client()
-
-        assert new_client is not original
-        assert new_client is latest
-        assert new_client.api_key == "new-key"
+class TestInstanceIsolation:
+    @pytest.mark.asyncio
+    async def test_credentials_and_http_lifetimes_are_independent(self, settings):
+        first = BhashiniClient(api_key="first-key", user_id="first-user", settings=settings)
+        second = BhashiniClient(api_key="second-key", user_id="second-user", settings=settings)
+        try:
+            first_http = await first._get_client()
+            second_http = await second._get_client()
+            assert first_http is not second_http
+            assert first_http.headers["Authorization"] == "first-key"
+            assert second_http.headers["Authorization"] == "second-key"
+            assert first.user_id == "first-user"
+            assert second.user_id == "second-user"
+            await first.close()
+            assert first_http.is_closed
+            assert not second_http.is_closed
+            assert await second._get_client() is second_http
+        finally:
+            await first.close()
+            await second.close()

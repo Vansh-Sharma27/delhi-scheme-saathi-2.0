@@ -60,6 +60,7 @@ class SQSAIWorkQueue:
     def __init__(self, queue_url: str, region: str) -> None:
         self._queue_url = queue_url
         self._client = boto3.client("sqs", region_name=region)
+        self._closed = False
 
     async def enqueue(self, item: AIWorkItem) -> None:
         body = json.dumps(serialize_work_item(item))
@@ -98,7 +99,10 @@ class SQSAIWorkQueue:
         )
 
     async def close(self) -> None:
-        return None
+        """Release the owned SDK client's connections at most once."""
+        if not self._closed:
+            self._closed = True
+            await asyncio.to_thread(self._client.close)
 
 
 def serialize_work_item(item: AIWorkItem) -> dict[str, str | int]:

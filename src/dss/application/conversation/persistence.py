@@ -1,23 +1,31 @@
 """Persist completed turns and schedule memory refresh."""
 
 import logging
-from typing import Any
+from collections.abc import Awaitable, Callable
 
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.contracts import ChatResponse
 from src.dss.application.conversation.language_policy import LanguagePolicy
+from src.dss.application.conversation.memory import should_refresh_working_memory
+from src.dss.application.ports.responses import Responses
+from src.dss.application.ports.session_repository import SessionStore
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 from src.dss.domain.schemes.scheme import SchemeMatch
+from src.dss.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
 class TurnPersistence:
-    def __init__(self, *, dependencies: Any, settings: Any, session_store: Any, clock: Any) -> None:
-        self.dependencies = dependencies
+    def __init__(
+        self, *, responses: Responses, settings: Settings, session_store: SessionStore,
+        enqueue: Callable[[str, int], Awaitable[bool]],
+    ) -> None:
+        self.responses = responses
         self.settings = settings
         self.session_store = session_store
-        self.clock = clock
+        self.enqueue = enqueue
 
     async def _finalize_turn(
         self,
@@ -35,9 +43,9 @@ class TurnPersistence:
             session,
             response_text,
             lang,
-            responses=self.dependencies.response_generator,
+            responses=self.responses,
         )
-        session = self.dependencies.session_manager.update_state(session, next_state)
+        session = session_manager.update_state(session, next_state)
         await self._save_completed_turn(
             session,
             user_message=user_message,
@@ -60,28 +68,26 @@ class TurnPersistence:
         response_text: str,
     ) -> Session:
         """Persist a completed user-assistant turn and enqueue memory refresh if due."""
-        session = await self.dependencies.session_manager.add_message(session, "user", user_message)
-        session = await self.dependencies.session_manager.add_message(
+        session = await session_manager.add_message(session, "user", user_message)
+        session = await session_manager.add_message(
             session, "assistant", response_text
         )
-        session = self.dependencies.session_manager.mark_turn_completed(session)
+        session = session_manager.mark_turn_completed(session)
 
-        refresh_due = self.dependencies.should_refresh_working_memory(
+        refresh_due = should_refresh_working_memory(
             session,
             trigger_turns=self.settings.ai_memory_refresh_turns,
             trigger_tokens=self.settings.ai_memory_refresh_token_threshold,
         )
         if refresh_due:
-            session = self.dependencies.session_manager.set_pending_memory_job(session, True)
+            session = session_manager.set_pending_memory_job(session, True)
 
-        await self.dependencies.session_manager.save_session(session, store=self.session_store)
+        await session_manager.save_session(session, store=self.session_store)
 
         if not refresh_due:
             return session
 
-        if await self.dependencies.enqueue_memory_refresh(
-            session.user_id, session.completed_turn_count, clock=self.clock
-        ):
+        if await self.enqueue(session.user_id, session.completed_turn_count):
             return session
 
         # The job never made it onto the queue, so clear the marker; leaving it
@@ -91,8 +97,8 @@ class TurnPersistence:
             session.user_id,
             session.completed_turn_count,
         )
-        session = self.dependencies.session_manager.set_pending_memory_job(session, False)
-        await self.dependencies.session_manager.save_session(session, store=self.session_store)
+        session = session_manager.set_pending_memory_job(session, False)
+        await session_manager.save_session(session, store=self.session_store)
         return session
 
     async def _build_command_response(

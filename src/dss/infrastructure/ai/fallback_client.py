@@ -12,7 +12,6 @@ from collections.abc import Awaitable, Callable
 from time import perf_counter
 from typing import Any, TypeVar
 
-from src.config import get_settings
 from src.dss.application.ports.llm import (
     LLMProvider as LLMProvider,
 )
@@ -22,6 +21,9 @@ from src.dss.application.ports.llm import (
 from src.dss.application.ports.llm import (
     TaskPriority as TaskPriority,
 )
+from src.dss.infrastructure.ai.bedrock_client import BedrockLLMClient
+from src.dss.infrastructure.ai.grok_client import GrokLLMClient
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,26 +38,38 @@ class FallbackLLMClient:
     - Fallback: xAI Grok via OpenAI-compatible API (always available)
     """
 
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(
+        self, settings: Settings | None = None, *,
+        bedrock: Callable[[], BedrockLLMClient] | None = None,
+        grok: Callable[[], GrokLLMClient] | None = None,
+    ) -> None:
+        settings = settings if settings is not None else get_settings()
         self._use_bedrock = settings.use_bedrock
         self._use_grok = bool(settings.xai_api_key)
-        self._bedrock_client = None
-        self._grok_client = None
+        self._bedrock_client: BedrockLLMClient | None = None
+        self._grok_client: GrokLLMClient | None = None
+        self._build_bedrock = bedrock or (lambda: BedrockLLMClient(settings))
+        self._build_grok = grok or (lambda: GrokLLMClient(settings))
 
-    def _get_grok_client(self):
+    def _get_grok_client(self) -> GrokLLMClient:
         """Lazy init Grok client."""
         if self._grok_client is None:
-            from src.dss.infrastructure.ai.grok_client import GrokLLMClient
-            self._grok_client = GrokLLMClient()
+            self._grok_client = self._build_grok()
         return self._grok_client
 
-    def _get_bedrock_client(self):
+    def _get_bedrock_client(self) -> BedrockLLMClient:
         """Lazy init Bedrock client."""
         if self._bedrock_client is None:
-            from src.dss.infrastructure.ai.bedrock_client import BedrockLLMClient
-            self._bedrock_client = BedrockLLMClient()
+            self._bedrock_client = self._build_bedrock()
         return self._bedrock_client
+
+    async def close(self) -> None:
+        try:
+            if self._grok_client is not None:
+                await self._grok_client.close()
+        finally:
+            if self._bedrock_client is not None:
+                await self._bedrock_client.close()
 
     async def _execute_with_fallback(
         self,
@@ -352,15 +366,3 @@ class FallbackLLMClient:
 class LLMClient(FallbackLLMClient):
     """Alias for FallbackLLMClient (backward compatibility)."""
     pass
-
-
-# Singleton instance
-_llm_client: FallbackLLMClient | None = None
-
-
-def get_llm_client() -> FallbackLLMClient:
-    """Get or create LLM client singleton."""
-    global _llm_client
-    if _llm_client is None:
-        _llm_client = FallbackLLMClient()
-    return _llm_client

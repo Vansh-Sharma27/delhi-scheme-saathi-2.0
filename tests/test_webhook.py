@@ -1,19 +1,34 @@
 """Tests for Telegram webhook handler."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.db.session_store import InMemorySessionStore, configure_session_store, get_session_store
-from src.integrations.sarvam import STTResult, TTSResult
-from src.models.api import TelegramUpdate
-from src.models.session import ConversationState, Session, UserProfile
+from src.dss.application.conversation.contracts import TelegramUpdate
+from src.dss.application.ports.speech import STTResult, TTSResult
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.conversations.states import ConversationState
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
+from src.dss.interfaces.telegram.dispatch import TelegramHandler
+from tests.conversation_fakes import ConversationFixture
+from tests.test_phase6_sessions import FixedClock
 
 
-@pytest.fixture(autouse=True)
-def reset_session_store() -> None:
-    """Use a fresh in-memory session store for each webhook test."""
-    configure_session_store(InMemorySessionStore())
+@pytest.fixture
+def make_telegram_handler():
+    """Construct delivery with isolated, explicitly supplied dependencies."""
+    def make(notifier, speech, conversation=None):
+        clock = FixedClock()
+        return TelegramHandler(
+            notifier=notifier,
+            speech=speech,
+            store=InMemorySessionStore(clock),
+            clock=clock,
+            conversation=conversation if conversation is not None else AsyncMock(),
+        )
+
+    return make
 
 
 class TestTelegramUpdate:
@@ -100,9 +115,8 @@ class TestVoiceMessageHandling:
     """Tests for voice message processing."""
 
     @pytest.mark.asyncio
-    async def test_voice_without_api_key_sends_fallback(self):
+    async def test_voice_without_api_key_sends_fallback(self, make_telegram_handler):
         """Test voice message without voice API key sends fallback."""
-        from src.webhook.handler import _handle_voice_message
 
         update_data = {
             "update_id": 123456,
@@ -122,23 +136,18 @@ class TestVoiceMessageHandling:
         mock_voice_client = MagicMock()
         mock_voice_client.is_available.return_value = False
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345")
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", Session(user_id="67890"))
 
-            # Should send "coming soon" message and return None
-            assert result is None
-            mock_telegram.send_text.assert_called_once()
-            call_args = mock_telegram.send_text.call_args[0]
-            assert "soon" in call_args[1].lower()
+        # Should send "coming soon" message and return None
+        assert result is None
+        mock_telegram.send_text.assert_called_once()
+        call_args = mock_telegram.send_text.call_args[0]
+        assert "soon" in call_args[1].lower()
 
     @pytest.mark.asyncio
-    async def test_voice_with_api_key_success(self):
+    async def test_voice_with_api_key_success(self, make_telegram_handler):
         """Test voice message with voice API key returns transcription."""
-        from src.webhook.handler import _handle_voice_message
 
         update_data = {
             "update_id": 123456,
@@ -166,25 +175,20 @@ class TestVoiceMessageHandling:
             )
         )
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345")
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", Session(user_id="67890"))
 
-            assert result == "मुझे पेंशन चाहिए"
-            mock_telegram.download_voice.assert_called_once_with("voice_123")
-            assert mock_voice_client.speech_to_text.await_count >= 1
-            mock_telegram.send_text.assert_called_once_with(
-                "12345",
-                "आपने कहा: मुझे पेंशन चाहिए",
-            )
+        assert result == "मुझे पेंशन चाहिए"
+        mock_telegram.download_voice.assert_called_once_with("voice_123")
+        assert mock_voice_client.speech_to_text.await_count >= 1
+        mock_telegram.send_text.assert_called_once_with(
+            "12345",
+            "आपने कहा: मुझे पेंशन चाहिए",
+        )
 
     @pytest.mark.asyncio
-    async def test_voice_low_confidence_asks_retry(self):
+    async def test_voice_low_confidence_asks_retry(self, make_telegram_handler):
         """Test low confidence STT asks user to retry."""
-        from src.webhook.handler import _handle_voice_message
 
         update_data = {
             "update_id": 123456,
@@ -210,23 +214,18 @@ class TestVoiceMessageHandling:
             )
         )
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345")
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", Session(user_id="67890"))
 
-            # Should return None and ask to retry
-            assert result is None
-            mock_telegram.send_text.assert_called_once()
-            call_args = mock_telegram.send_text.call_args[0]
-            assert "again" in call_args[1].lower() or "दोबारा" in call_args[1]
+        # Should return None and ask to retry
+        assert result is None
+        mock_telegram.send_text.assert_called_once()
+        call_args = mock_telegram.send_text.call_args[0]
+        assert "again" in call_args[1].lower() or "दोबारा" in call_args[1]
 
     @pytest.mark.asyncio
-    async def test_voice_prefers_locked_english_before_hindi(self):
+    async def test_voice_prefers_locked_english_before_hindi(self, make_telegram_handler):
         """Locked English sessions should probe English first."""
-        from src.webhook.handler import _handle_voice_message
 
         update = TelegramUpdate(
             update_id=1,
@@ -253,12 +252,8 @@ class TestVoiceMessageHandling:
             {"language_preference": "en", "language_locked": True},
         )()
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345", session)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", session)
 
         assert result == "I need housing help"
         first_call = mock_voice_client.speech_to_text.await_args_list[0]
@@ -269,9 +264,8 @@ class TestVoiceMessageHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_voice_echo_uses_locked_hindi_prefix_even_for_english_transcript(self):
+    async def test_voice_echo_uses_locked_hindi_prefix_even_for_english_transcript(self, make_telegram_handler):
         """Locked Hindi sessions should keep the Hindi echo prefix."""
-        from src.webhook.handler import _handle_voice_message
 
         update = TelegramUpdate(
             update_id=11,
@@ -298,12 +292,8 @@ class TestVoiceMessageHandling:
             {"language_preference": "hi", "language_locked": True},
         )()
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345", session)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", session)
 
         assert result == "General"
         mock_telegram.send_text.assert_called_once_with(
@@ -312,9 +302,8 @@ class TestVoiceMessageHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_voice_echo_uses_locked_hinglish_prefix_even_for_english_transcript(self):
+    async def test_voice_echo_uses_locked_hinglish_prefix_even_for_english_transcript(self, make_telegram_handler):
         """Locked Hinglish sessions should keep the Hinglish echo prefix."""
-        from src.webhook.handler import _handle_voice_message
 
         update = TelegramUpdate(
             update_id=12,
@@ -341,12 +330,8 @@ class TestVoiceMessageHandling:
             {"language_preference": "hinglish", "language_locked": True},
         )()
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345", session)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", session)
 
         assert result == "I need application steps"
         mock_telegram.send_text.assert_called_once_with(
@@ -355,9 +340,8 @@ class TestVoiceMessageHandling:
         )
 
     @pytest.mark.asyncio
-    async def test_unlocked_hindi_history_does_not_bias_voice_probe_order(self):
+    async def test_unlocked_hindi_history_does_not_bias_voice_probe_order(self, make_telegram_handler):
         """Unlocked prior language should not force Hindi-first STT."""
-        from src.webhook.handler import _handle_voice_message
 
         update = TelegramUpdate(
             update_id=2,
@@ -384,21 +368,16 @@ class TestVoiceMessageHandling:
             {"language_preference": "hi", "language_locked": False},
         )()
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await _handle_voice_message(update, "12345", session)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        result = await handler.voice(update, "12345", session)
 
         assert result == "I need housing help"
         first_call = mock_voice_client.speech_to_text.await_args_list[0]
         assert first_call.kwargs["source_lang"] == "en"
 
     @pytest.mark.asyncio
-    async def test_audio_caption_is_combined_with_transcript(self):
+    async def test_audio_caption_is_combined_with_transcript(self, make_telegram_handler):
         """Audio captions should survive alongside the STT transcript."""
-        from src.webhook.handler import handle_telegram_update
 
         update_data = {
             "update_id": 99,
@@ -439,19 +418,16 @@ class TestVoiceMessageHandling:
             {"language_preference": "auto", "language_locked": False},
         )()
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ), patch(
-            "src.webhook.handler.ConversationService", return_value=mock_service
-        ), patch(
-            "src.webhook.handler._send_response", AsyncMock()
-        ), patch(
-            "src.webhook.handler.session_manager.get_or_create_session",
-            AsyncMock(return_value=session),
-        ):
-            result = await handle_telegram_update(update_data, AsyncMock())
+        handler = make_telegram_handler(
+            mock_telegram, mock_voice_client, mock_service.handle_message
+        )
+        await handler.store.save(Session(
+            user_id="67890",
+            language_preference=session.language_preference,
+            language_locked=session.language_locked,
+        ))
+        handler.send_response = AsyncMock()
+        result = await handler.handle(update_data)
 
         request = mock_service.handle_message.await_args.args[0]
         assert request.message == "please use english\nI need housing help"
@@ -460,7 +436,7 @@ class TestVoiceMessageHandling:
     @pytest.mark.asyncio
     async def test_transcription_scoring_penalizes_probe_language_mismatch(self):
         """Provider-detected language should outweigh a mismatched probe."""
-        from src.webhook.handler import _transcribe_with_fallbacks
+        from src.dss.interfaces.telegram.handler import _transcribe_with_fallbacks
 
         mock_voice_client = MagicMock()
         mock_voice_client.speech_to_text = AsyncMock(
@@ -497,7 +473,6 @@ class TestTextMessageHandling:
     @pytest.mark.asyncio
     async def test_help_command_flows_through_webhook_without_llm(self):
         """A Telegram /help text should return the deterministic help guide."""
-        from src.webhook.handler import handle_telegram_update
 
         update_data = {
             "update_id": 123500,
@@ -513,12 +488,12 @@ class TestTextMessageHandling:
         mock_voice_client = MagicMock()
         mock_voice_client.is_available.return_value = False
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await handle_telegram_update(update_data, AsyncMock())
+        graph = ConversationFixture()
+        handler = TelegramHandler(
+            notifier=mock_telegram, speech=mock_voice_client,
+            store=graph.store, clock=graph.clock, conversation=graph.handle_message,
+        )
+        result = await handler.handle(update_data)
 
         assert result["status"] == "ok"
         mock_telegram.send_chat_action.assert_called_once_with(12345, "typing")
@@ -539,7 +514,6 @@ class TestTextMessageHandling:
     @pytest.mark.asyncio
     async def test_language_command_flows_through_webhook_with_picker(self):
         """A Telegram /language text should return inline language buttons."""
-        from src.webhook.handler import handle_telegram_update
 
         update_data = {
             "update_id": 123501,
@@ -555,12 +529,12 @@ class TestTextMessageHandling:
         mock_voice_client = MagicMock()
         mock_voice_client.is_available.return_value = False
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            result = await handle_telegram_update(update_data, AsyncMock())
+        graph = ConversationFixture()
+        handler = TelegramHandler(
+            notifier=mock_telegram, speech=mock_voice_client,
+            store=graph.store, clock=graph.clock, conversation=graph.handle_message,
+        )
+        result = await handler.handle(update_data)
 
         assert result["status"] == "ok"
         mock_telegram.send_inline_keyboard.assert_called_once()
@@ -576,9 +550,9 @@ class TestTextMessageHandling:
     @pytest.mark.asyncio
     async def test_language_callback_flows_through_webhook(self):
         """Language callback should preserve scheme context through the webhook path."""
-        from src.webhook.handler import handle_telegram_update
 
-        store = get_session_store()
+        graph = ConversationFixture()
+        store = graph.store
         await store.save(
             Session(
                 user_id="67890",
@@ -612,15 +586,12 @@ class TestTextMessageHandling:
         mock_voice_client = MagicMock()
         mock_voice_client.is_available.return_value = False
 
-        with patch(
-            "src.webhook.handler.get_telegram_client", return_value=mock_telegram
-        ), patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ), patch(
-            "src.services.conversation.views.build_scheme_details_text",
-            AsyncMock(return_value="शिक्षा योजना विवरण"),
-        ):
-            result = await handle_telegram_update(update_data, AsyncMock())
+        graph.views.build_scheme_details_text = AsyncMock(return_value="शिक्षा योजना विवरण")
+        handler = TelegramHandler(
+            notifier=mock_telegram, speech=mock_voice_client,
+            store=store, clock=graph.clock, conversation=graph.handle_message,
+        )
+        result = await handler.handle(update_data)
 
         session = await store.get("67890")
         assert result["status"] == "ok"
@@ -638,9 +609,8 @@ class TestSendResponse:
     """Tests for response sending."""
 
     @pytest.mark.asyncio
-    async def test_send_text_response(self):
+    async def test_send_text_response(self, make_telegram_handler):
         """Test sending text-only response."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
@@ -651,18 +621,15 @@ class TestSendResponse:
         mock_response.text = "Hello there!"
         mock_response.inline_keyboard = None
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=False)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=False)
 
-            mock_telegram.send_text.assert_called_once_with("12345", "Hello there!")
-            mock_telegram.send_voice.assert_not_called()
+        mock_telegram.send_text.assert_called_once_with("12345", "Hello there!")
+        mock_telegram.send_voice.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_inline_keyboard_response(self):
+    async def test_send_inline_keyboard_response(self, make_telegram_handler):
         """Test sending response with inline keyboard."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
@@ -675,18 +642,15 @@ class TestSendResponse:
             {"text": "Scheme 2", "callback_data": "SCH-002"},
         ]
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=False)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=False)
 
-            mock_telegram.send_inline_keyboard.assert_called_once()
-            mock_telegram.send_text.assert_not_called()
+        mock_telegram.send_inline_keyboard.assert_called_once()
+        mock_telegram.send_text.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_voice_response_with_tts(self):
+    async def test_send_voice_response_with_tts(self, make_telegram_handler):
         """Non-OGG TTS should use Telegram's audio endpoint."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
 
@@ -705,25 +669,22 @@ class TestSendResponse:
         mock_response.language = "hi"
         mock_response.next_state = "SCHEME_PRESENTATION"
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=True)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=True)
 
-            # Should send both text and generic audio for WAV bytes
-            mock_telegram.send_text.assert_called_once()
-            mock_telegram.send_audio.assert_called_once_with(
-                "12345",
-                b"audio data",
-                filename="response.wav",
-                content_type="audio/wav",
-            )
-            mock_telegram.send_voice.assert_not_called()
+        # Should send both text and generic audio for WAV bytes
+        mock_telegram.send_text.assert_called_once()
+        mock_telegram.send_audio.assert_called_once_with(
+            "12345",
+            b"audio data",
+            filename="response.wav",
+            content_type="audio/wav",
+        )
+        mock_telegram.send_voice.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_voice_response_uses_voice_endpoint_for_ogg(self):
+    async def test_send_voice_response_uses_voice_endpoint_for_ogg(self, make_telegram_handler):
         """Native OGG voice bytes should stay on Telegram's voice endpoint."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
 
@@ -742,10 +703,8 @@ class TestSendResponse:
         mock_response.language = "hi"
         mock_response.next_state = "SCHEME_PRESENTATION"
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=True)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=True)
 
         mock_telegram.send_text.assert_called_once()
         mock_telegram.send_voice.assert_called_once_with(
@@ -757,9 +716,8 @@ class TestSendResponse:
         mock_telegram.send_audio.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_voice_response_skips_hinglish_tts(self):
+    async def test_send_voice_response_skips_hinglish_tts(self, make_telegram_handler):
         """Hinglish text should stay text-only for voice replies."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
@@ -772,19 +730,16 @@ class TestSendResponse:
         mock_response.language = "hinglish"
         mock_response.next_state = "SCHEME_DETAILS"
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=True)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=True)
 
         mock_telegram.send_text.assert_called_once()
         mock_voice_client.text_to_speech.assert_not_called()
         mock_telegram.send_voice.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_send_voice_response_skips_long_structured_tts(self):
+    async def test_send_voice_response_skips_long_structured_tts(self, make_telegram_handler):
         """Long structured replies should not be truncated into partial voice audio."""
-        from src.webhook.handler import _send_response
 
         mock_telegram = AsyncMock()
         mock_voice_client = MagicMock()
@@ -797,10 +752,8 @@ class TestSendResponse:
         mock_response.language = "en"
         mock_response.next_state = "SCHEME_DETAILS"
 
-        with patch(
-            "src.webhook.handler._get_voice_client", return_value=mock_voice_client
-        ):
-            await _send_response(mock_telegram, "12345", mock_response, is_voice=True)
+        handler = make_telegram_handler(mock_telegram, mock_voice_client)
+        await handler.send_response("12345", mock_response, is_voice=True)
 
         mock_telegram.send_text.assert_called_once()
         mock_voice_client.text_to_speech.assert_not_called()
@@ -811,7 +764,7 @@ class TestCleanForTTS:
 
     def test_removes_emojis(self):
         """Test emoji removal from text."""
-        from src.webhook.handler import _clean_for_tts
+        from src.dss.interfaces.telegram.formatting import _clean_for_tts
 
         text = "🎤 नमस्ते 🙏 आपका स्वागत है"
         result = _clean_for_tts(text)
@@ -821,7 +774,7 @@ class TestCleanForTTS:
 
     def test_removes_markdown(self):
         """Test markdown removal from text."""
-        from src.webhook.handler import _clean_for_tts
+        from src.dss.interfaces.telegram.formatting import _clean_for_tts
 
         text = "**Bold** and *italic* and `code`"
         result = _clean_for_tts(text)
@@ -832,7 +785,7 @@ class TestCleanForTTS:
 
     def test_removes_links(self):
         """Test link removal from text."""
-        from src.webhook.handler import _clean_for_tts
+        from src.dss.interfaces.telegram.formatting import _clean_for_tts
 
         text = "Visit [portal](https://example.com) for more"
         result = _clean_for_tts(text)
@@ -842,7 +795,7 @@ class TestCleanForTTS:
 
     def test_keeps_long_text_intact(self):
         """Text cleaning should not silently truncate TTS content."""
-        from src.webhook.handler import _clean_for_tts
+        from src.dss.interfaces.telegram.formatting import _clean_for_tts
 
         text = "a" * 1000
         result = _clean_for_tts(text)
@@ -854,7 +807,7 @@ class TestCleanForTelegram:
 
     def test_removes_markdown_artifacts(self):
         """Headers and markdown markers should be normalized for plain text."""
-        from src.webhook.handler import _clean_for_telegram
+        from src.dss.interfaces.telegram.formatting import _clean_for_telegram
 
         text = "### Welcome\n\n**Bold** text and `code` with _italics_."
         result = _clean_for_telegram(text)
@@ -872,7 +825,7 @@ class TestExtractLocation:
 
     def test_extracts_location(self):
         """Test location extraction from update."""
-        from src.webhook.handler import extract_location
+        from src.dss.interfaces.telegram.handler import extract_location
 
         update_data = {
             "update_id": 123456,
@@ -895,7 +848,7 @@ class TestExtractLocation:
 
     def test_returns_none_without_location(self):
         """Test returns None when no location."""
-        from src.webhook.handler import extract_location
+        from src.dss.interfaces.telegram.handler import extract_location
 
         update_data = {
             "update_id": 123456,
@@ -917,14 +870,14 @@ class TestSplitMessage:
 
     def test_short_message_is_not_split(self):
         """A message within the limit is returned unchanged, as one part."""
-        from src.webhook.handler import _split_message
+        from src.dss.interfaces.telegram.formatting import _split_message
 
         text = "योजना की जानकारी\n\nआप पात्र हैं।"
         assert _split_message(text) == [text]
 
     def test_splits_between_paragraphs(self):
         """Paragraphs are grouped so no part exceeds the limit."""
-        from src.webhook.handler import _TG_MAX_LEN, _split_message
+        from src.dss.interfaces.telegram.formatting import _TG_MAX_LEN, _split_message
 
         paragraph = "क" * 1500
         text = "\n\n".join([paragraph] * 4)
@@ -938,7 +891,7 @@ class TestSplitMessage:
 
     def test_single_oversized_paragraph_is_kept_whole(self):
         """A paragraph longer than the limit is not chopped mid-sentence."""
-        from src.webhook.handler import _TG_MAX_LEN, _split_message
+        from src.dss.interfaces.telegram.formatting import _TG_MAX_LEN, _split_message
 
         text = "a" * (_TG_MAX_LEN + 500)
 
@@ -948,7 +901,7 @@ class TestSplitMessage:
 
     def test_oversized_paragraph_does_not_swallow_the_next_one(self):
         """An oversized paragraph is emitted alone, and later ones still follow."""
-        from src.webhook.handler import _TG_MAX_LEN, _split_message
+        from src.dss.interfaces.telegram.formatting import _TG_MAX_LEN, _split_message
 
         oversized = "a" * (_TG_MAX_LEN + 500)
         text = f"{oversized}\n\ntail paragraph"

@@ -18,8 +18,6 @@ from dataclasses import dataclass
 
 import httpx
 
-from src.config import get_settings
-
 logger = logging.getLogger(__name__)
 
 JINA_API_URL = "https://api.jina.ai/v1/embeddings"
@@ -181,23 +179,3 @@ class JinaEmbeddingClient:
         if self._client:
             await self._client.aclose()
             self._client = None
-
-
-# Singleton instance
-_jina_client: JinaEmbeddingClient | None = None
-
-
-def get_jina_client() -> JinaEmbeddingClient:
-    """Get or create Jina embedding client singleton."""
-    global _jina_client
-    if _jina_client is None:
-        settings = get_settings()
-        _jina_client = JinaEmbeddingClient(api_key=settings.jina_api_key)
-    return _jina_client
-
-
-def configure_jina_client(api_key: str) -> JinaEmbeddingClient:
-    """Configure and return Jina client with specific API key."""
-    global _jina_client
-    _jina_client = JinaEmbeddingClient(api_key=api_key)
-    return _jina_client

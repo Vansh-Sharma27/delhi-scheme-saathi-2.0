@@ -1,13 +1,13 @@
 """Session store - in-memory for MVP, DynamoDB for production.
 
-Moved to ``src.dss.infrastructure.sessions`` in Phase 3 behind the
-``SessionStore`` port; the legacy ``src.db.session_store`` module re-exports
-these names until Phase 6 removes the facade.
+Implements the ``SessionStore`` port with in-memory and DynamoDB adapters.
 
 In-memory saves accept an injected Clock, defaulting to SystemClock. DynamoDB
 reads use an optional clock only for missing timestamps. TTL remains derived
 from updated_at plus seven days, and DynamoDB saves never restamp the session.
 """
+
+from contextlib import suppress
 
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import (
@@ -54,7 +54,20 @@ class DynamoDBSessionStore:
         self._table_name = table_name
         self._clock = clock
         self._dynamodb = boto3.resource("dynamodb", region_name=region)
-        self._table = self._dynamodb.Table(table_name)
+        self._closed = False
+        try:
+            self._table = self._dynamodb.Table(table_name)
+        except BaseException:
+            # Preserve the construction error even if releasing the client fails.
+            with suppress(Exception):
+                self.close()
+            raise
+
+    def close(self) -> None:
+        """Release the owned SDK client's connections at most once."""
+        if not self._closed:
+            self._closed = True
+            self._dynamodb.meta.client.close()
 
     async def get(self, user_id: str) -> Session | None:
         """Get session by user ID."""
@@ -91,22 +104,3 @@ class DynamoDBSessionStore:
             self._table.delete_item(Key={"user_id": user_id})
 
         await asyncio.get_running_loop().run_in_executor(None, _delete)
-
-
-# Global session store instance (configured at startup)
-_session_store: SessionStore | None = None
-
-
-def get_session_store() -> SessionStore:
-    """Get the configured session store."""
-    global _session_store
-    if _session_store is None:
-        # Default to in-memory for local development
-        _session_store = InMemorySessionStore()
-    return _session_store
-
-
-def configure_session_store(store: SessionStore) -> None:
-    """Configure the session store (called at startup)."""
-    global _session_store
-    _session_store = store

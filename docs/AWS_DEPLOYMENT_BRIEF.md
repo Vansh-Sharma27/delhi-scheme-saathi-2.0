@@ -113,6 +113,9 @@ Deploy `delhi-scheme-saathi` on AWS with:
 - Set `UseBedrock` default to `true`.
 
 ## 3.2 Runtime and integrations
+
+The paths in this historical list predate Phase 6. Current code is under `src/dss/`: Lambda entrypoints are `src.dss.bootstrap.lambda_api.handler` and `src.dss.bootstrap.memory_worker.handler`; models are in `domain/` and application contracts, providers in `infrastructure/`, conversation and matching in `application/`, and Telegram handling in `interfaces/telegram/`. The old Lambda lifespan fix below is historical; current invocation ownership is described in [ARCHITECTURE.md](ARCHITECTURE.md#four-consumer-surfaces).
+
 - `src/lambda_handler.py`: enabled lifespan startup.
 - `src/models/session.py`: DynamoDB-safe timestamp serialization; stricter matching completeness.
 - `src/integrations/bedrock_client.py`: safe JSON serialization for non-primitive values.

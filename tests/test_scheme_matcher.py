@@ -4,10 +4,23 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.db import scheme_repo
-from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.models.session import UserProfile
-from src.services import scheme_matcher
+from src.dss.application.matching.scheme_matcher import SchemeMatcher
+from src.dss.application.ports.embeddings import EmbeddingProvider
+from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.domain.eligibility.evaluator import calculate_eligibility_match
+from src.dss.domain.profiles.profile import UserProfile
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate
+from src.dss.infrastructure.database import scheme_repo
+from src.dss.infrastructure.database.catalog import get_canonical_life_events
+from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM
+
+
+@pytest.fixture
+def matcher() -> SchemeMatcher:
+    return SchemeMatcher(
+        AsyncMock(spec=SchemeRepository), AsyncMock(spec=EmbeddingProvider),
+        get_canonical_life_events, embedding_dimension=EMBEDDING_DIM,
+    )
 
 
 def _make_housing_scheme() -> Scheme:
@@ -94,7 +107,7 @@ def test_calculate_eligibility_match_uses_income_segments_not_caste_category() -
         annual_income=500000,
     )
 
-    match = scheme_repo.calculate_eligibility_match(scheme, profile)
+    match = calculate_eligibility_match(scheme, profile)
 
     assert "category" not in match
     assert match["income_segment"] is True
@@ -112,7 +125,7 @@ def test_calculate_eligibility_match_treats_all_category_as_unrestricted() -> No
         annual_income=50000,
     )
 
-    match = scheme_repo.calculate_eligibility_match(scheme, profile)
+    match = calculate_eligibility_match(scheme, profile)
 
     assert match["age"] is True
     assert match["gender"] is True
@@ -122,7 +135,7 @@ def test_calculate_eligibility_match_treats_all_category_as_unrestricted() -> No
 
 @pytest.mark.asyncio
 async def test_match_schemes_keeps_housing_scheme_for_obc_user_with_lig_income(
-    monkeypatch: pytest.MonkeyPatch,
+    matcher: SchemeMatcher,
 ) -> None:
     """Income-band schemes should survive deterministic post-filtering."""
     scheme = _make_housing_scheme()
@@ -132,22 +145,18 @@ async def test_match_schemes_keeps_housing_scheme_for_obc_user_with_lig_income(
         category="OBC",
         annual_income=500000,
     )
-    eligibility_match = scheme_repo.calculate_eligibility_match(scheme, profile)
 
-    async def fake_hybrid_search(**kwargs):  # type: ignore[no-untyped-def]
+    async def fake_retrieve_candidates(**kwargs):  # type: ignore[no-untyped-def]
         return [
-            SchemeMatch(
+            SchemeCandidate(
                 scheme=scheme,
                 similarity=0.5,
-                eligibility_match=eligibility_match,
-                deterministic_score=0.6,
             )
         ]
 
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
+    matcher.schemes.retrieve_candidates.side_effect = fake_retrieve_candidates
 
-    matches = await scheme_matcher.match_schemes(
-        pool=AsyncMock(),  # type: ignore[arg-type]
+    matches = await matcher.match_schemes(
         profile=profile,
         query_text=None,
     )
@@ -157,7 +166,7 @@ async def test_match_schemes_keeps_housing_scheme_for_obc_user_with_lig_income(
 
 @pytest.mark.asyncio
 async def test_match_schemes_filters_cross_domain_candidate_even_if_db_tag_is_wrong(
-    monkeypatch: pytest.MonkeyPatch,
+    matcher: SchemeMatcher,
 ) -> None:
     """Strong name/tag signals should prevent an education scheme leaking into housing."""
     housing = _make_housing_scheme()
@@ -169,26 +178,21 @@ async def test_match_schemes_filters_cross_domain_candidate_even_if_db_tag_is_wr
         annual_income=500000,
     )
 
-    async def fake_hybrid_search(**kwargs):  # type: ignore[no-untyped-def]
+    async def fake_retrieve_candidates(**kwargs):  # type: ignore[no-untyped-def]
         return [
-            SchemeMatch(
+            SchemeCandidate(
                 scheme=housing,
                 similarity=0.8,
-                eligibility_match=scheme_repo.calculate_eligibility_match(housing, profile),
-                deterministic_score=0.8,
             ),
-            SchemeMatch(
+            SchemeCandidate(
                 scheme=leaked_education,
                 similarity=0.7,
-                eligibility_match=scheme_repo.calculate_eligibility_match(leaked_education, profile),
-                deterministic_score=0.7,
             ),
         ]
 
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
+    matcher.schemes.retrieve_candidates.side_effect = fake_retrieve_candidates
 
-    matches = await scheme_matcher.match_schemes(
-        pool=AsyncMock(),  # type: ignore[arg-type]
+    matches = await matcher.match_schemes(
         profile=profile,
         query_text=None,
     )
@@ -198,7 +202,7 @@ async def test_match_schemes_filters_cross_domain_candidate_even_if_db_tag_is_wr
 
 @pytest.mark.asyncio
 async def test_match_schemes_keeps_valid_multi_life_event_scheme_via_canonical_mapping(
-    monkeypatch: pytest.MonkeyPatch,
+    matcher: SchemeMatcher,
 ) -> None:
     """Canonical bundled tags should preserve valid multi-event schemes."""
     pmay = _make_housing_scheme()
@@ -209,20 +213,17 @@ async def test_match_schemes_keeps_valid_multi_life_event_scheme_via_canonical_m
         annual_income=500000,
     )
 
-    async def fake_hybrid_search(**kwargs):  # type: ignore[no-untyped-def]
+    async def fake_retrieve_candidates(**kwargs):  # type: ignore[no-untyped-def]
         return [
-            SchemeMatch(
+            SchemeCandidate(
                 scheme=pmay,
                 similarity=0.8,
-                eligibility_match=scheme_repo.calculate_eligibility_match(pmay, profile),
-                deterministic_score=0.8,
             )
         ]
 
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
+    matcher.schemes.retrieve_candidates.side_effect = fake_retrieve_candidates
 
-    matches = await scheme_matcher.match_schemes(
-        pool=AsyncMock(),  # type: ignore[arg-type]
+    matches = await matcher.match_schemes(
         profile=profile,
         query_text=None,
     )
@@ -234,65 +235,49 @@ async def test_match_schemes_keeps_valid_multi_life_event_scheme_via_canonical_m
 @pytest.mark.parametrize(
     ("dimension", "expects_vector"),
     [
-        (scheme_matcher.EMBEDDING_DIM - 1, False),
-        (scheme_matcher.EMBEDDING_DIM, True),
-        (scheme_matcher.EMBEDDING_DIM + 1, False),
+        (EMBEDDING_DIM - 1, False),
+        (EMBEDDING_DIM, True),
+        (EMBEDDING_DIM + 1, False),
     ],
 )
 async def test_match_schemes_forwards_only_exact_dimension_embeddings(
-    monkeypatch: pytest.MonkeyPatch,
+    matcher: SchemeMatcher,
     dimension: int,
     expects_vector: bool,
 ) -> None:
     """The repository receives a vector only at the configured dimension."""
-    embedding_client = AsyncMock()
-    embedding_client.get_embedding = AsyncMock(return_value=[0.0] * dimension)
-    hybrid_search = AsyncMock(return_value=[])
-    monkeypatch.setattr(
-        scheme_matcher,
-        "get_embedding_client",
-        lambda: embedding_client,
-    )
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", hybrid_search)
+    matcher.embeddings.get_embedding.return_value = [0.0] * dimension
+    retrieve_candidates = matcher.schemes.retrieve_candidates
+    retrieve_candidates.return_value = []
 
-    await scheme_matcher.match_schemes(
-        pool=AsyncMock(),  # type: ignore[arg-type]
+    await matcher.match_schemes(
         profile=UserProfile(life_event="HOUSING"),
         query_text="housing help",
     )
 
-    query_embedding = hybrid_search.await_args.kwargs["query_embedding"]
+    query_embedding = retrieve_candidates.await_args.kwargs["query_embedding"]
     assert (query_embedding is not None) is expects_vector
     if expects_vector:
-        assert len(query_embedding) == scheme_matcher.EMBEDDING_DIM
+        assert len(query_embedding) == EMBEDDING_DIM
 
 
 @pytest.mark.asyncio
 async def test_match_schemes_forwards_none_after_embedding_provider_failure(
-    monkeypatch: pytest.MonkeyPatch,
+    matcher: SchemeMatcher,
 ) -> None:
     """Provider failure explicitly selects repository SQL fallback mode."""
-    embedding_client = AsyncMock()
-    embedding_client.get_embedding = AsyncMock(
-        side_effect=RuntimeError("provider unavailable")
-    )
-    hybrid_search = AsyncMock(return_value=[])
-    monkeypatch.setattr(
-        scheme_matcher,
-        "get_embedding_client",
-        lambda: embedding_client,
-    )
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", hybrid_search)
+    matcher.embeddings.get_embedding.side_effect = RuntimeError("provider unavailable")
+    retrieve_candidates = matcher.schemes.retrieve_candidates
+    retrieve_candidates.return_value = []
 
-    await scheme_matcher.match_schemes(
-        pool=AsyncMock(),  # type: ignore[arg-type]
+    await matcher.match_schemes(
         profile=UserProfile(life_event="HOUSING"),
         query_text="housing help",
         limit=4,
     )
 
-    assert hybrid_search.await_args.kwargs["query_embedding"] is None
-    assert hybrid_search.await_args.kwargs["limit"] == 12
+    assert retrieve_candidates.await_args.kwargs["query_embedding"] is None
+    assert retrieve_candidates.await_args.kwargs["limit"] == 12
 
 
 class _AcquireContext:
@@ -315,13 +300,13 @@ class _CapturingPool:
 
 
 @pytest.mark.asyncio
-async def test_hybrid_search_without_embedding_uses_benefit_fallback_order() -> None:
+async def test_retrieve_candidates_without_embedding_uses_benefit_fallback_order() -> None:
     """SQL fallback ordering and parameter positions are pinned directly."""
     connection = AsyncMock()
     connection.fetch = AsyncMock(return_value=[])
     pool = _CapturingPool(connection)
 
-    await scheme_repo.hybrid_search(
+    await scheme_repo.retrieve_candidates(
         pool=pool,  # type: ignore[arg-type]
         life_event=None,
         profile=UserProfile(age=30, annual_income=200000),

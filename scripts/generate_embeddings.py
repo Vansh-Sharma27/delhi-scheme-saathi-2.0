@@ -22,10 +22,13 @@ async def main():
     from dotenv import load_dotenv
     load_dotenv()
 
-    database_url = os.environ.get("DATABASE_URL")
-    voyage_key = os.environ.get("VOYAGE_API_KEY")
+    from src.dss.settings import Settings
 
-    if not database_url:
+    settings = Settings()
+    database_url = settings.database_url
+    voyage_key = settings.voyage_api_key
+
+    if not os.environ.get("DATABASE_URL"):
         print("ERROR: DATABASE_URL not set")
         sys.exit(1)
     if not voyage_key:
@@ -34,46 +37,49 @@ async def main():
 
     import asyncpg
 
-    from src.dss.infrastructure.embeddings.fallback_client import get_embedding_client
+    from src.dss.infrastructure.embeddings.fallback_client import FallbackEmbeddingClient
 
     print("Connecting to database...")
     pool = await asyncpg.create_pool(dsn=database_url)
 
-    print("Initializing embedding client...")
-    client = get_embedding_client()
-
-    # Get all schemes
-    rows = await pool.fetch("SELECT id, description, description_hindi FROM schemes")
-    print(f"Found {len(rows)} schemes\n")
-
-    for row in rows:
-        scheme_id = row["id"]
-        # Combine English and Hindi descriptions for richer embedding
-        text = f"{row['description']}\n\n{row['description_hindi']}"
-
-        print(f"Generating embedding for {scheme_id}...")
+    try:
+        print("Initializing embedding client...")
+        client = FallbackEmbeddingClient(settings)
         try:
-            embedding = await client.get_embedding(text)
+            # Get all schemes
+            rows = await pool.fetch("SELECT id, description, description_hindi FROM schemes")
+            print(f"Found {len(rows)} schemes\n")
 
-            # Format as PostgreSQL vector literal
-            embedding_str = f"[{','.join(map(str, embedding))}]"
+            for row in rows:
+                scheme_id = row["id"]
+                # Combine English and Hindi descriptions for richer embedding
+                text = f"{row['description']}\n\n{row['description_hindi']}"
 
-            await pool.execute(
-                "UPDATE schemes SET description_embedding = $1::vector WHERE id = $2",
-                embedding_str,
-                scheme_id
+                print(f"Generating embedding for {scheme_id}...")
+                try:
+                    embedding = await client.get_embedding(text)
+
+                    # Format as PostgreSQL vector literal
+                    embedding_str = f"[{','.join(map(str, embedding))}]"
+
+                    await pool.execute(
+                        "UPDATE schemes SET description_embedding = $1::vector WHERE id = $2",
+                        embedding_str,
+                        scheme_id
+                    )
+                    print(f"  Updated with {len(embedding)}-dim embedding")
+                except Exception as e:
+                    print(f"  ERROR: {e}")
+
+            # Verify
+            count = await pool.fetchval(
+                "SELECT COUNT(*) FROM schemes WHERE description_embedding IS NOT NULL"
             )
-            print(f"  Updated with {len(embedding)}-dim embedding")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-
-    # Verify
-    count = await pool.fetchval(
-        "SELECT COUNT(*) FROM schemes WHERE description_embedding IS NOT NULL"
-    )
-    print(f"\nDone! {count} schemes now have embeddings.")
-
-    await pool.close()
+            print(f"\nDone! {count} schemes now have embeddings.")
+        finally:
+            await client.close()
+    finally:
+        await pool.close()
 
 
 if __name__ == "__main__":

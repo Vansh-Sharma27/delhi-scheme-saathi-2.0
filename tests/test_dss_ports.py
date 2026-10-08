@@ -33,8 +33,11 @@ from typing import Any
 
 import pytest
 
-from src.config import get_settings
-from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
+from src.dss.application.conversation.ai_orchestrator import AIOrchestrator, AITaskType
+from src.dss.application.matching.scheme_relevance import (
+    CLARIFY_CONFIDENCE_THRESHOLD,
+    PRESENT_CONFIDENCE_THRESHOLD,
+)
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.document_repository import DocumentRepository
 from src.dss.application.ports.embeddings import EmbeddingProvider
@@ -61,18 +64,15 @@ from src.dss.application.ports.work_queue import (
     AIWorkQueue,
     AIWorkType,
 )
+from src.dss.domain.conversations.session import Session
+from src.dss.domain.schemes.rejection_rule import RejectionRule
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
+from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
-from src.integrations.llm_client import FallbackLLMClient
-from src.integrations.telegram import TelegramClient
-from src.models.rejection_rule import RejectionRule
-from src.models.session import Session
-from src.services.ai_orchestrator import AIOrchestrator, AITaskType
-from src.services.scheme_relevance import (
-    CLARIFY_CONFIDENCE_THRESHOLD,
-    PRESENT_CONFIDENCE_THRESHOLD,
-)
+from src.dss.infrastructure.telegram import TelegramClient
+from src.dss.settings import get_settings
 
 
 def test_llm_port_conformance() -> None:
@@ -442,7 +442,7 @@ async def test_in_memory_session_store_exercised_through_port() -> None:
 def test_work_queue_port_conformance() -> None:
     """Both queue backends expose the AIWorkQueue methods. issubclass needs
     no construction, so SQSAIWorkQueue is checked without a boto3 client."""
-    from src.services.ai_background import InMemoryAIWorkQueue, SQSAIWorkQueue
+    from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue, SQSAIWorkQueue
 
     assert issubclass(InMemoryAIWorkQueue, AIWorkQueue)
     assert issubclass(SQSAIWorkQueue, AIWorkQueue)
@@ -456,7 +456,7 @@ async def test_in_memory_ai_work_queue_exercised_through_port() -> None:
     they were enqueued, so a later item must not dequeue before an earlier
     one. The payload type AIWorkItem is also constructed and read through
     the port types to confirm the moved dataclass still round-trips."""
-    from src.services.ai_background import InMemoryAIWorkQueue
+    from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue
 
     queue: AIWorkQueue = InMemoryAIWorkQueue()
     assert isinstance(queue, AIWorkQueue)
@@ -543,7 +543,7 @@ async def test_in_memory_rejection_rule_repository_conforms_and_orders_by_severi
 
 class InMemorySchemeRepository:
     """List-backed scheme repository. When no embedding is passed to
-    `hybrid_search`, the legacy repo falls back to ordering by
+    `retrieve_candidates`, the repository falls back to ordering by
     `benefits_amount DESC` (spec 11.1); the fake mirrors that fallback so
     Phase 3 tests of the matching layer can pin it."""
 
@@ -567,20 +567,20 @@ class InMemorySchemeRepository:
     async def list_life_events(self) -> list[dict[str, Any]]:
         return []
 
-    async def hybrid_search(
+    async def retrieve_candidates(
         self,
         life_event: str | None,
         profile: Any,
         query_embedding: list[float] | None = None,
         limit: int = 5,
     ) -> list[Any]:
-        from src.models.scheme import SchemeMatch
+        from src.dss.domain.schemes.scheme import SchemeCandidate
 
         hits = self._schemes if life_event is None else [
             s for s in self._schemes if life_event in s.life_events
         ]
         ordered = sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)
-        return [SchemeMatch(scheme=s, similarity=0.0) for s in ordered[:limit]]
+        return [SchemeCandidate(scheme=s, similarity=0.0) for s in ordered[:limit]]
 
     async def search_schemes_by_text(self, search_text: str, limit: int = 10) -> list[Any]:
         needle = search_text.lower()
@@ -589,15 +589,6 @@ class InMemorySchemeRepository:
             if needle in s.name.lower() or needle in s.description.lower()
         ]
         return sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)[:limit]
-
-    async def retrieve_candidates(
-        self, life_event: str | None, profile: Any,
-        query_embedding: list[float] | None = None, limit: int = 5,
-    ) -> list[Any]:
-        from src.dss.domain.schemes.scheme import SchemeCandidate
-
-        matches = await self.hybrid_search(life_event, profile, query_embedding, limit)
-        return [SchemeCandidate(scheme=m.scheme, similarity=m.similarity) for m in matches]
 
     async def get_scheme_debug_rows(self, scheme_ids: list[str]) -> list[dict[str, Any]]:
         wanted = set(scheme_ids)
@@ -610,7 +601,7 @@ class InMemorySchemeRepository:
 def _scheme(
     sid: str, name: str, benefits_amount: int | None, life_events: list[str], active: bool = True
 ) -> Any:
-    from src.models.scheme import Scheme
+    from src.dss.domain.schemes.scheme import Scheme
 
     return Scheme(
         id=sid, name=name, name_hindi=name, department="d", department_hindi="ड",
@@ -623,7 +614,7 @@ def _scheme(
 async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benefit() -> None:
     """InMemorySchemeRepository conforms to SchemeRepository. The asserted
     invariant is the spec 11.1 fallback: when no embedding is passed,
-    `hybrid_search` orders candidates by `benefits_amount DESC`. That is the
+    `retrieve_candidates` orders candidates by `benefits_amount DESC`. That is the
     degradation path the matching layer silently takes on any embedding
     failure, so a port fake that does not reproduce it would mislead Phase 3
     tests. `get_scheme_by_id` returning None for a miss is also asserted
@@ -640,9 +631,7 @@ async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benef
     assert by_id is not None and by_id.id == "S1"
     assert await repo.get_scheme_by_id("missing") is None
 
-    matches = await repo.hybrid_search("HOUSING", profile=None, query_embedding=None)
-    assert [m.scheme.id for m in matches] == ["S2", "S1", "S3"]
-    candidates = await repo.retrieve_candidates("HOUSING", profile=None)
+    candidates = await repo.retrieve_candidates("HOUSING", profile=None, query_embedding=None)
     assert [c.scheme.id for c in candidates] == ["S2", "S1", "S3"]
     assert all(not hasattr(c, "eligibility_match") for c in candidates)
 
@@ -694,7 +683,7 @@ class InMemoryDocumentRepository:
 
 
 def _document(doc_id: str, name: str, name_hindi: str = "ड") -> Any:
-    from src.models.document import Document
+    from src.dss.domain.schemes.document import Document
 
     return Document(
         id=doc_id, name=name, name_hindi=name_hindi, issuing_authority="UIDAI",
@@ -777,7 +766,7 @@ class InMemoryOfficeRepository:
 
 
 def _office(oid: str, district: str, services: list[str], otype: str = "CSC") -> Any:
-    from src.models.office import Office
+    from src.dss.domain.schemes.office import Office
 
     return Office(
         id=oid, name=oid, type=otype, address="addr", district=district, services=services,

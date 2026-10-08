@@ -1,9 +1,8 @@
 """Rejection rule repository.
 
-Moved to ``src.dss.infrastructure.database`` in Phase 3; the legacy
-``src.db.rejection_rule_repo`` module re-exports these names until Phase 6
-removes the facade. The pool-holding adapter classes implementing the Phase
-2 repository ports live in ``src.dss.infrastructure.database.adapters``.
+Canonical rejection-rule repository implementation. The pool-holding adapter
+implementing the repository port lives in
+``src.dss.infrastructure.database.adapters``.
 
 Call sites as of 2026-07-26: only ``get_rules_by_scheme`` has any. It backs
 ``rejection_engine.get_rejection_warnings`` (the bot's rejection-warnings
@@ -51,7 +50,7 @@ async def get_rules_by_ids(
     """Get rejection rules by IDs, most severe first.
 
     Currently uncalled. Its counterpart is ``Scheme.rejection_rules``
-    (src/models/scheme.py), a list of rule IDs carried on every scheme row
+    (src/dss/domain/schemes/scheme.py), a list of rule IDs carried on every scheme row
     that nothing reads yet — fetching by those IDs is what this is for, and
     is cheaper than a second scheme-keyed query once a scheme is loaded.
 

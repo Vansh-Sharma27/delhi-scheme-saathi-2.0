@@ -57,6 +57,21 @@ The services will be available at:
 - **API Docs**: http://localhost:8000/docs
 - **PostgreSQL**: localhost:5434
 
+### Run the canonical app directly (Bash)
+
+From the repository root, with a Python 3.11 environment activated:
+
+```bash
+pip install -r requirements.lock
+docker compose up -d postgres
+docker compose stop app
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5434/delhi_scheme_saathi"
+AUTO_SEED_DATA=true python -m scripts.ensure_seed_data
+uvicorn src.dss.bootstrap.api:app --host 0.0.0.0 --port 8000
+```
+
+The host process reads `.env`; `DATABASE_URL` above overrides its container hostname. `scripts/container_start.py` runs the same seed-data check and canonical app target inside Docker. The app's lifespan owns the runtime resources and any in-memory background worker; settings defaults and backend-selection predicates are unchanged. See [ARCHITECTURE.md](ARCHITECTURE.md#four-consumer-surfaces) for Lambda, SQS worker, and script ownership.
+
 ## Step 3: Verify Setup
 
 ```bash

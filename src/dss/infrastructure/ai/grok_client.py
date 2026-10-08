@@ -20,8 +20,8 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from src.config import get_settings
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,16 @@ logger = logging.getLogger(__name__)
 class GrokLLMClient:
     """Async LLM client using xAI Grok via OpenAI SDK."""
 
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, settings: Settings | None = None) -> None:
+        settings = settings if settings is not None else get_settings()
         self._client = AsyncOpenAI(
             api_key=settings.xai_api_key,
             base_url=settings.xai_base_url,
         )
         self._model = settings.xai_model
+
+    async def close(self) -> None:
+        await self._client.close()
 
     async def analyze_message(
         self,
@@ -383,15 +386,3 @@ Provide a 2-3 sentence summary in English:
             logger.error("Conversation summarization failed: %s", e)
             # Re-raise so the fallback wrapper can decide fallback behavior.
             raise
-
-
-# Global client instance
-_grok_client: GrokLLMClient | None = None
-
-
-def get_grok_client() -> GrokLLMClient:
-    """Get or create Grok LLM client singleton."""
-    global _grok_client
-    if _grok_client is None:
-        _grok_client = GrokLLMClient()
-    return _grok_client

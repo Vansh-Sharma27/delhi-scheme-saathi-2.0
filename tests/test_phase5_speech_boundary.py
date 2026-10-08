@@ -1,16 +1,20 @@
 """Speech consumers require capabilities, not provider credentials."""
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from src.dss.application.conversation.contracts import ChatResponse, TelegramUpdate
 from src.dss.application.ports.speech import SpeechProvider
+from src.dss.bootstrap import runtime
+from src.dss.domain.conversations.session import Session
+from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
 from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
-from src.webhook import handler
+from src.dss.interfaces.telegram.dispatch import TelegramHandler
+from src.dss.settings import Settings
 from tests.test_dss_ports import FakeSpeechProvider
+from tests.test_phase6_sessions import FixedClock
 
 
 class CredentialFreeSpeech(FakeSpeechProvider):
@@ -43,41 +47,48 @@ def test_adapter_reports_existing_configuration_without_exposing_it(adapter, con
         (False, False, "sarvam"),
     ],
 )
-def test_legacy_wiring_preserves_selection_order(monkeypatch, sarvam, bhashini, selected) -> None:
+async def test_bootstrap_preserves_selection_order(monkeypatch, sarvam, bhashini, selected) -> None:
     sarvam_client = CredentialFreeSpeech(sarvam)
     bhashini_client = CredentialFreeSpeech(bhashini)
+    sarvam_client.close = AsyncMock()
+    bhashini_client.close = AsyncMock()
     factories = {
         "sarvam": Mock(return_value=sarvam_client),
         "bhashini": Mock(return_value=bhashini_client),
     }
-    monkeypatch.setattr(
-        handler,
-        "get_settings",
-        lambda: SimpleNamespace(
-            sarvam_api_key="synthetic" if sarvam else "",
-            bhashini_api_key="synthetic" if bhashini else "",
-        ),
+    settings = Settings(
+        _env_file=None,
+        sarvam_api_key="synthetic" if sarvam else "",
+        bhashini_api_key="synthetic" if bhashini else "",
     )
-    monkeypatch.setattr(handler, "get_sarvam_client", factories["sarvam"])
-    monkeypatch.setattr(handler, "get_bhashini_client", factories["bhashini"])
-    client = handler._get_voice_client()
-    assert client is (sarvam_client if selected == "sarvam" else bhashini_client)
-    assert isinstance(client, SpeechProvider)
-    factories[selected].assert_called_once_with()
+    monkeypatch.setattr(runtime, "open_pool", AsyncMock(side_effect=RuntimeError("offline")))
+    monkeypatch.setattr(runtime, "build_session_store", lambda *args, **kwargs: Mock())
+    monkeypatch.setattr(runtime, "build_work_queue", lambda settings: None)
+    monkeypatch.setattr(runtime, "FallbackLLMClient", Mock(return_value=AsyncMock()))
+    monkeypatch.setattr(runtime, "FallbackEmbeddingClient", Mock(return_value=AsyncMock()))
+    monkeypatch.setattr(runtime, "TelegramClient", Mock(return_value=AsyncMock()))
+    monkeypatch.setattr(runtime, "SarvamClient", factories["sarvam"])
+    monkeypatch.setattr(runtime, "BhashiniClient", factories["bhashini"])
+    async with runtime.api_runtime(settings) as graph:
+        client = graph.dependencies.telegram.__self__.speech
+        assert client is (sarvam_client if selected == "sarvam" else bhashini_client)
+        assert isinstance(client, SpeechProvider)
+    factories[selected].assert_called_once_with(settings=settings)
     factories["bhashini" if selected == "sarvam" else "sarvam"].assert_not_called()
+    client.close.assert_awaited_once()
 
 
 @pytest.mark.parametrize("enabled", [False, True])
-async def test_stt_and_tts_use_only_the_capability(monkeypatch, enabled) -> None:
+async def test_stt_and_tts_use_only_the_capability(enabled) -> None:
     provider = CredentialFreeSpeech(enabled)
     notifier = AsyncMock()
     notifier.download_voice.return_value = b"synthetic-audio"
-    monkeypatch.setattr(handler, "_get_voice_client", lambda: provider)
-    monkeypatch.setattr(handler, "get_telegram_client", lambda: notifier)
+    clock = FixedClock()
+    handler = TelegramHandler(notifier, provider, InMemorySessionStore(clock), clock, AsyncMock())
     update = TelegramUpdate(update_id=1, message={"voice": {"file_id": "synthetic-file"}})
-    transcript = await handler._handle_voice_message(update, "synthetic-chat")
+    transcript = await handler.voice(update, "synthetic-chat", Session(user_id="synthetic-user"))
     response = ChatResponse(text="Synthetic response", language="en")
-    await handler._send_response(notifier, "synthetic-chat", response, True)
+    await handler.send_response("synthetic-chat", response, True)
     if enabled:
         assert transcript == "मुझे आवास चाहिए"
         assert provider.stt_calls == 2

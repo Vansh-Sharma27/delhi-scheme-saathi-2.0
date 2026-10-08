@@ -14,7 +14,9 @@ from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
 from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.infrastructure.database.adapters import PostgresSchemeRepository
-from src.dss.interfaces.api.routes import APIRoutes
+from src.dss.interfaces.api.dependencies import APIDependencies
+from src.dss.interfaces.api.http import HTTPRoutes
+from src.dss.settings import Settings
 
 
 class QueryPool:
@@ -138,8 +140,11 @@ async def test_http_payloads_and_errors_match_pre_port_handlers(method, argument
             rejection_rule_repo=module_proxy(rules),
         ),
     )
+    dependencies = APIDependencies(
+        Settings(_env_file=None), schemes, documents, offices, rules, AsyncMock(), AsyncMock(),
+    )
     outcomes = []
-    for handlers in [original.APIRoutes(runtime), APIRoutes(runtime)]:
+    for handlers in [original.APIRoutes(runtime), HTTPRoutes(dependencies)]:
         try:
             outcomes.append(await getattr(handlers, method)(**arguments))
         except HTTPException as error:
