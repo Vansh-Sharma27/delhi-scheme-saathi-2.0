@@ -23,7 +23,7 @@ from src.dss.application.ports.speech import (
 from src.dss.application.ports.speech import (
     TTSResult as TTSResult,
 )
-from src.dss.settings import get_settings
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ class BhashiniClient:
         api_key: str | None = None,
         user_id: str | None = None,
         ulca_api_key: str | None = None,
+        *, settings: Settings | None = None,
     ):
         """Initialize Bhashini client.
 
@@ -63,7 +64,7 @@ class BhashiniClient:
             user_id: Bhashini user ID; falls back to settings
             ulca_api_key: ULCA API key for pipeline access; falls back to settings
         """
-        settings = get_settings()
+        settings = settings if settings is not None else get_settings()
         self.api_key = api_key or settings.bhashini_api_key
         self.user_id = user_id or settings.bhashini_user_id
         self.ulca_api_key = ulca_api_key or settings.bhashini_ulca_api_key

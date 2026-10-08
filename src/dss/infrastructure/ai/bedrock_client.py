@@ -20,7 +20,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
-from src.dss.settings import get_settings
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +57,11 @@ class BedrockLLMClient:
     for multi-turn conversations.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         """Initialize Bedrock client with regional configuration."""
-        settings = get_settings()
+        settings = settings if settings is not None else get_settings()
+        self.settings = settings
+        self._executors: dict[str, ThreadPoolExecutor] = {}
         self._config = Config(
             region_name=settings.aws_region,
             read_timeout=60,
@@ -68,6 +70,26 @@ class BedrockLLMClient:
         )
         self._client: Any = None
         self._model_id = settings.bedrock_model or NOVA_MODEL_ID
+
+    def _executor(self, priority: str) -> ThreadPoolExecutor:
+        key = "background" if priority == "background" else "inline"
+        if key not in self._executors:
+            concurrency = (
+                self.settings.ai_background_concurrency if key == "background"
+                else self.settings.ai_inline_concurrency
+            )
+            self._executors[key] = ThreadPoolExecutor(max_workers=max(1, concurrency))
+        return self._executors[key]
+
+    async def close(self) -> None:
+        import asyncio
+
+        for executor in self._executors.values():
+            await asyncio.to_thread(executor.shutdown, wait=True)
+        self._executors.clear()
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     def _runtime(self) -> Any:
         """Return the boto3 runtime client, creating it on first use.
@@ -244,7 +266,7 @@ Respond with ONLY the JSON object, no other text.
             # Run synchronous boto3 call in thread pool
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
-                _get_executor(priority),
+                self._executor(priority),
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": system_prompt}],
@@ -358,7 +380,7 @@ Rules:
         try:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
-                _get_executor(priority),
+                self._executor(priority),
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": "You audit relevance between user needs and deterministic scheme candidates."}],
@@ -431,7 +453,7 @@ Generate response:
         try:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
-                _get_executor(priority),
+                self._executor(priority),
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{"text": system_prompt}],
@@ -496,7 +518,7 @@ Provide a 2-3 sentence summary in English:
         try:
             loop = asyncio.get_running_loop()
             response = await loop.run_in_executor(
-                _get_executor(priority),
+                self._executor(priority),
                 lambda: self._runtime().converse(
                     modelId=self._model_id,
                     system=[{

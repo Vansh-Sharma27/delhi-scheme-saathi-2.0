@@ -21,7 +21,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from src.dss.infrastructure.database.catalog import get_required_profile_fields_for_life_event
-from src.dss.settings import get_settings
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,16 @@ logger = logging.getLogger(__name__)
 class GrokLLMClient:
     """Async LLM client using xAI Grok via OpenAI SDK."""
 
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, settings: Settings | None = None) -> None:
+        settings = settings if settings is not None else get_settings()
         self._client = AsyncOpenAI(
             api_key=settings.xai_api_key,
             base_url=settings.xai_base_url,
         )
         self._model = settings.xai_model
+
+    async def close(self) -> None:
+        await self._client.close()
 
     async def analyze_message(
         self,

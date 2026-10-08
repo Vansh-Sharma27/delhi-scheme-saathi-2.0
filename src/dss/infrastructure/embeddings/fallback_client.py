@@ -20,7 +20,7 @@ import httpx
 from src.dss.application.ports.embeddings import (
     EmbeddingProvider as EmbeddingProvider,
 )
-from src.dss.settings import get_settings
+from src.dss.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ class FallbackEmbeddingClient:
     - Fallback: Voyage AI voyage-multilingual-2 (reliable backup)
     """
 
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, settings: Settings | None = None) -> None:
+        settings = settings if settings is not None else get_settings()
         self._jina_key = settings.jina_api_key
         self._voyage_key = settings.voyage_api_key
         self._http_client: httpx.AsyncClient | None = None

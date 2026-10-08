@@ -58,10 +58,7 @@ async def test_llm_falls_back_from_bedrock_to_grok(monkeypatch: pytest.MonkeyPat
                 "clarification_question": None,
             }
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", FakeBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", FakeGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(get_settings(), bedrock=FakeBedrock, grok=FakeGrok)
     result = await client.analyze_message(
         user_message="मुझे घर चाहिए",
         conversation_history=[],
@@ -91,10 +88,7 @@ async def test_llm_returns_safe_defaults_when_all_providers_fail(
         async def analyze_message(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(get_settings(), bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.analyze_message(
         user_message="hello",
         conversation_history=[],
@@ -125,10 +119,7 @@ async def test_llm_generate_response_safe_fallback_when_all_providers_fail(
         async def generate_response(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(get_settings(), bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.generate_response(
         context={},
         system_prompt="test",
@@ -155,10 +146,7 @@ async def test_llm_summarize_returns_current_summary_when_all_providers_fail(
         async def summarize_conversation(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(get_settings(), bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.summarize_conversation(
         messages=[{"role": "user", "content": "hello"}],
         current_summary="existing summary",
@@ -184,10 +172,7 @@ async def test_llm_relevance_judge_returns_safe_defaults_when_all_providers_fail
         async def judge_scheme_relevance(self, *args, **kwargs):  # type: ignore[no-untyped-def]
             raise RuntimeError("grok unavailable")
 
-    monkeypatch.setattr(bedrock_client, "BedrockLLMClient", AlwaysFailBedrock)
-    monkeypatch.setattr(grok_client, "GrokLLMClient", AlwaysFailGrok)
-
-    client = llm_client.FallbackLLMClient()
+    client = llm_client.FallbackLLMClient(get_settings(), bedrock=AlwaysFailBedrock, grok=AlwaysFailGrok)
     result = await client.judge_scheme_relevance(
         user_message="I need housing assistance",
         conversation_history=[],
