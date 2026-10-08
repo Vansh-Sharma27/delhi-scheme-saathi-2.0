@@ -135,11 +135,8 @@ def test_phase5_physical_line_limits() -> None:
         relative = path.relative_to(ROOT).as_posix()
         if relative not in baseline:
             assert len(path.read_text(encoding="utf-8").splitlines()) <= 500, relative
-    for relative in [
-        "src/dss/application/conversation/service.py",
-        "src/services/conversation/service.py",
-    ]:
-        assert len((ROOT / relative).read_text(encoding="utf-8").splitlines()) < 300
+    service = ROOT / "src/dss/application/conversation/service.py"
+    assert len(service.read_text(encoding="utf-8").splitlines()) < 300
 
 
 def test_telegram_dispatch_is_owned_by_canonical_interface() -> None:
