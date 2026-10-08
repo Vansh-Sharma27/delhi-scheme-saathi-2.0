@@ -18,5 +18,6 @@
     "src/webhook/handler.py": "src/dss/interfaces/telegram/handler.py",
     "src/utils/validators.py": "src/dss/application/conversation/validators.py",
     "src/services/life_event_classifier.py": "src/dss/application/conversation/life_event_classifier.py",
-    "src/services/fsm.py": "src/dss/application/conversation/fsm.py"
+    "src/services/fsm.py": "src/dss/application/conversation/fsm.py",
+    "src/integrations/telegram.py": "src/dss/infrastructure/telegram.py"
 }
