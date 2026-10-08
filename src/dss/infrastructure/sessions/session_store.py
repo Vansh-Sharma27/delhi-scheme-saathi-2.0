@@ -1,8 +1,6 @@
 """Session store - in-memory for MVP, DynamoDB for production.
 
-Moved to ``src.dss.infrastructure.sessions`` in Phase 3 behind the
-``SessionStore`` port; the legacy ``src.db.session_store`` module re-exports
-these names until Phase 6 removes the facade.
+Implements the ``SessionStore`` port with in-memory and DynamoDB adapters.
 
 In-memory saves accept an injected Clock, defaulting to SystemClock. DynamoDB
 reads use an optional clock only for missing timestamps. TTL remains derived
@@ -91,22 +89,3 @@ class DynamoDBSessionStore:
             self._table.delete_item(Key={"user_id": user_id})
 
         await asyncio.get_running_loop().run_in_executor(None, _delete)
-
-
-# Global session store instance (configured at startup)
-_session_store: SessionStore | None = None
-
-
-def get_session_store() -> SessionStore:
-    """Get the configured session store."""
-    global _session_store
-    if _session_store is None:
-        # Default to in-memory for local development
-        _session_store = InMemorySessionStore()
-    return _session_store
-
-
-def configure_session_store(store: SessionStore) -> None:
-    """Configure the session store (called at startup)."""
-    global _session_store
-    _session_store = store

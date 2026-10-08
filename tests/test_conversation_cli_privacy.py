@@ -42,10 +42,10 @@ def owned_cli(monkeypatch):
         (runtime, "TelegramClient"),
         (runtime, "SarvamClient"),
         (runtime, "BhashiniClient"),
-        (session_store, "configure_session_store"),
-        (session_store, "get_session_store"),
     ):
         monkeypatch.setattr(module, name, Mock(side_effect=AssertionError(name)))
+    assert not hasattr(session_store, "configure_session_store")
+    assert not hasattr(session_store, "get_session_store")
     return SimpleNamespace(
         pool=pool, open_pool=open_pool, llm=llm, embeddings=embeddings,
         llm_factory=llm_factory, embedding_factory=embedding_factory,

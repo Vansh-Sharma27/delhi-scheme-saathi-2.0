@@ -1,9 +1,8 @@
 """Document repository.
 
-Moved to ``src.dss.infrastructure.database`` in Phase 3; the legacy
-``src.db.document_repo`` module re-exports these names until Phase 6 removes
-the facade. The pool-holding adapter classes implementing the Phase 2
-repository ports live in ``src.dss.infrastructure.database.adapters``.
+Canonical document repository implementation. The pool-holding adapter
+implementing the repository port lives in
+``src.dss.infrastructure.database.adapters``.
 """
 
 import asyncpg

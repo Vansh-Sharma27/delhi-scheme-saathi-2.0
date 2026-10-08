@@ -8,7 +8,7 @@ import os
 
 import asyncpg
 
-from src.db.scheme_repo import get_scheme_debug_rows
+from src.dss.infrastructure.database.adapters import PostgresSchemeRepository
 
 DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/delhi_scheme_saathi"
 DEFAULT_SCHEME_IDS = ["SCH-DELHI-001", "SCH-DELHI-006"]
@@ -19,7 +19,7 @@ async def main() -> None:
     database_url = os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     pool = await asyncpg.create_pool(database_url, min_size=1, max_size=2)
     try:
-        rows = await get_scheme_debug_rows(pool, DEFAULT_SCHEME_IDS)
+        rows = await PostgresSchemeRepository(pool).get_scheme_debug_rows(DEFAULT_SCHEME_IDS)
     finally:
         await pool.close()
 

@@ -1,15 +1,12 @@
 ﻿"""Port: scheme repository.
 
 Defines the read surface over schemes so the matching layer and the
-scheme-detail endpoint can depend on the port instead of the
-`src.db.scheme_repo` function module. The functions there are module-level
-and take a pool as the first argument, so no existing class satisfies a
-class-shaped protocol; Phase 3 wraps them in an adapter class that holds
-the pool and implements this port.
+scheme-detail endpoint can depend on the port instead of a pool-bound
+implementation detail. The adapter holds the pool and implements this port.
 
 Raw retrieval returns SchemeCandidate values for application-side evaluation.
-The legacy hybrid_search method remains until Phase 6. Domain types are
-runtime imports, visible to the full import-linter graph.
+The legacy hybrid_search method remains until its semantics are migrated.
+Domain types are runtime imports, visible to the full import-linter graph.
 """
 
 from __future__ import annotations

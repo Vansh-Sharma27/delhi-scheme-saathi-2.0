@@ -75,8 +75,7 @@ def test_prompt_loader_owns_and_reads_canonical_templates() -> None:
         loader.load_prompt("missing_template")
 
 
-def test_expanded_repositories_share_the_legacy_functions() -> None:
-    from src.db import document_repo, office_repo, rejection_rule_repo, scheme_repo
+def test_expanded_repositories_share_the_canonical_functions() -> None:
     from src.dss.infrastructure.database import (
         document_repo as documents,
     )
@@ -90,7 +89,7 @@ def test_expanded_repositories_share_the_legacy_functions() -> None:
         scheme_repo as schemes,
     )
 
-    assert documents.get_document_by_id is document_repo.get_document_by_id
-    assert offices.get_nearest_offices is office_repo.get_nearest_offices
-    assert rules.get_rules_by_scheme is rejection_rule_repo.get_rules_by_scheme
-    assert schemes.hybrid_search is scheme_repo.hybrid_search
+    assert documents.get_document_by_id.__module__ == documents.__name__
+    assert offices.get_nearest_offices.__module__ == offices.__name__
+    assert rules.get_rules_by_scheme.__module__ == rules.__name__
+    assert schemes.hybrid_search.__module__ == schemes.__name__

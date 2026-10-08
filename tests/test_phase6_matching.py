@@ -31,9 +31,13 @@ def legacy() -> ModuleType:
         if isinstance(node, ast.ImportFrom) and node.module in {
             "src.integrations.embedding_client",
             "src.dss.infrastructure.embeddings.fallback_client",
+            "src.db.scheme_repo",
         }:
-            node.module = "src.dss.infrastructure.embeddings.fallback_client"
-            node.names = [name for name in node.names if name.name != "get_embedding_client"]
+            if node.module == "src.db.scheme_repo":
+                node.module = "src.dss.infrastructure.database.scheme_repo"
+            else:
+                node.module = "src.dss.infrastructure.embeddings.fallback_client"
+                node.names = [name for name in node.names if name.name != "get_embedding_client"]
     tree.body = [node for node in tree.body if not isinstance(node, ast.ImportFrom) or node.names]
     exec(compile(tree, source_ref, "exec"), module.__dict__)
     return module

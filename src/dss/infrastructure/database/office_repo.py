@@ -1,9 +1,8 @@
 """Office repository with nearest-office queries.
 
-Moved to ``src.dss.infrastructure.database`` in Phase 3; the legacy
-``src.db.office_repo`` module re-exports these names until Phase 6 removes
-the facade. The pool-holding adapter classes implementing the Phase 2
-repository ports live in ``src.dss.infrastructure.database.adapters``.
+Canonical office repository implementation. The pool-holding adapter
+implementing the repository port lives in
+``src.dss.infrastructure.database.adapters``.
 """
 
 import math
