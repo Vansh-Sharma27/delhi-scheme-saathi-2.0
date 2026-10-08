@@ -92,4 +92,4 @@ def test_expanded_repositories_share_the_canonical_functions() -> None:
     assert documents.get_document_by_id.__module__ == documents.__name__
     assert offices.get_nearest_offices.__module__ == offices.__name__
     assert rules.get_rules_by_scheme.__module__ == rules.__name__
-    assert schemes.hybrid_search.__module__ == schemes.__name__
+    assert schemes.retrieve_candidates.__module__ == schemes.__name__

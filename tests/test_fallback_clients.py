@@ -211,12 +211,12 @@ async def test_matcher_skips_vector_ranking_on_failed_embedding() -> None:
 
     captured: dict[str, object] = {}
 
-    async def fake_hybrid_search(*, query_embedding, **kwargs):  # type: ignore[no-untyped-def]
+    async def fake_retrieve_candidates(*, query_embedding, **kwargs):  # type: ignore[no-untyped-def]
         captured["query_embedding"] = query_embedding
         return []
 
     repository = AsyncMock(spec=SchemeRepository)
-    repository.retrieve_candidates.side_effect = fake_hybrid_search
+    repository.retrieve_candidates.side_effect = fake_retrieve_candidates
     matcher = SchemeMatcher(
         repository, FailedEmbeddingClient(), lambda sid: [],
         embedding_dimension=embedding_client.EMBEDDING_DIM,

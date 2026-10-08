@@ -1,4 +1,4 @@
-"""Scheme repository with 3-stage hybrid search.
+"""Scheme repository with SQL-filtered raw candidate retrieval.
 
 Canonical scheme repository implementation. The pool-holding adapter
 implementing the repository port lives in
@@ -10,18 +10,8 @@ from typing import Any, cast
 
 import asyncpg
 
-from src.dss.domain.eligibility.evaluator import INCOME_SEGMENT_ORDER as INCOME_SEGMENT_ORDER
-from src.dss.domain.eligibility.evaluator import (
-    _infer_income_segment as _infer_income_segment,
-)
-from src.dss.domain.eligibility.evaluator import (
-    _lookup_case_insensitive as _lookup_case_insensitive,
-)
-from src.dss.domain.eligibility.evaluator import (
-    calculate_eligibility_match as calculate_eligibility_match,
-)
 from src.dss.domain.profiles.profile import UserProfile
-from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate, SchemeMatch
+from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate
 from src.dss.infrastructure.database.catalog import (
     get_canonical_life_events,
     get_canonical_scheme_ids_for_life_event,
@@ -193,26 +183,6 @@ async def retrieve_candidates(
             ))
 
         return results
-
-
-async def hybrid_search(
-    pool: asyncpg.Pool,
-    life_event: str | None,
-    profile: UserProfile,
-    query_embedding: list[float] | None = None,
-    limit: int = 5,
-) -> list[SchemeMatch]:
-    """Legacy evaluated retrieval, retained until Phase 6."""
-    candidates = await retrieve_candidates(pool, life_event, profile, query_embedding, limit)
-    return [
-        SchemeMatch(scheme=c.scheme, similarity=c.similarity, eligibility_match=_calculate_eligibility_match(c.scheme, profile))
-        for c in candidates
-    ]
-
-
-def _calculate_eligibility_match(scheme: Scheme, profile: UserProfile) -> dict[str, bool]:
-    """Backward-compatible private alias."""
-    return calculate_eligibility_match(scheme, profile)
 
 
 async def search_schemes_by_text(

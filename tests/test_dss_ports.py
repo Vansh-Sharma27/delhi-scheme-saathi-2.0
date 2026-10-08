@@ -543,7 +543,7 @@ async def test_in_memory_rejection_rule_repository_conforms_and_orders_by_severi
 
 class InMemorySchemeRepository:
     """List-backed scheme repository. When no embedding is passed to
-    `hybrid_search`, the legacy repo falls back to ordering by
+    `retrieve_candidates`, the repository falls back to ordering by
     `benefits_amount DESC` (spec 11.1); the fake mirrors that fallback so
     Phase 3 tests of the matching layer can pin it."""
 
@@ -567,20 +567,20 @@ class InMemorySchemeRepository:
     async def list_life_events(self) -> list[dict[str, Any]]:
         return []
 
-    async def hybrid_search(
+    async def retrieve_candidates(
         self,
         life_event: str | None,
         profile: Any,
         query_embedding: list[float] | None = None,
         limit: int = 5,
     ) -> list[Any]:
-        from src.dss.domain.schemes.scheme import SchemeMatch
+        from src.dss.domain.schemes.scheme import SchemeCandidate
 
         hits = self._schemes if life_event is None else [
             s for s in self._schemes if life_event in s.life_events
         ]
         ordered = sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)
-        return [SchemeMatch(scheme=s, similarity=0.0) for s in ordered[:limit]]
+        return [SchemeCandidate(scheme=s, similarity=0.0) for s in ordered[:limit]]
 
     async def search_schemes_by_text(self, search_text: str, limit: int = 10) -> list[Any]:
         needle = search_text.lower()
@@ -589,15 +589,6 @@ class InMemorySchemeRepository:
             if needle in s.name.lower() or needle in s.description.lower()
         ]
         return sorted(hits, key=lambda s: s.benefits_amount or 0, reverse=True)[:limit]
-
-    async def retrieve_candidates(
-        self, life_event: str | None, profile: Any,
-        query_embedding: list[float] | None = None, limit: int = 5,
-    ) -> list[Any]:
-        from src.dss.domain.schemes.scheme import SchemeCandidate
-
-        matches = await self.hybrid_search(life_event, profile, query_embedding, limit)
-        return [SchemeCandidate(scheme=m.scheme, similarity=m.similarity) for m in matches]
 
     async def get_scheme_debug_rows(self, scheme_ids: list[str]) -> list[dict[str, Any]]:
         wanted = set(scheme_ids)
@@ -623,7 +614,7 @@ def _scheme(
 async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benefit() -> None:
     """InMemorySchemeRepository conforms to SchemeRepository. The asserted
     invariant is the spec 11.1 fallback: when no embedding is passed,
-    `hybrid_search` orders candidates by `benefits_amount DESC`. That is the
+    `retrieve_candidates` orders candidates by `benefits_amount DESC`. That is the
     degradation path the matching layer silently takes on any embedding
     failure, so a port fake that does not reproduce it would mislead Phase 3
     tests. `get_scheme_by_id` returning None for a miss is also asserted
@@ -640,9 +631,7 @@ async def test_in_memory_scheme_repository_conforms_and_fallback_orders_by_benef
     assert by_id is not None and by_id.id == "S1"
     assert await repo.get_scheme_by_id("missing") is None
 
-    matches = await repo.hybrid_search("HOUSING", profile=None, query_embedding=None)
-    assert [m.scheme.id for m in matches] == ["S2", "S1", "S3"]
-    candidates = await repo.retrieve_candidates("HOUSING", profile=None)
+    candidates = await repo.retrieve_candidates("HOUSING", profile=None, query_embedding=None)
     assert [c.scheme.id for c in candidates] == ["S2", "S1", "S3"]
     assert all(not hasattr(c, "eligibility_match") for c in candidates)
 
