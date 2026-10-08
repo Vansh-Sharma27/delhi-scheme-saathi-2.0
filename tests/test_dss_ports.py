@@ -33,7 +33,7 @@ from typing import Any
 
 import pytest
 
-from src.db.session_store import DynamoDBSessionStore, InMemorySessionStore
+from src.dss.application.conversation.ai_orchestrator import AIOrchestrator, AITaskType
 from src.dss.application.matching.scheme_relevance import (
     CLARIFY_CONFIDENCE_THRESHOLD,
     PRESENT_CONFIDENCE_THRESHOLD,
@@ -64,15 +64,15 @@ from src.dss.application.ports.work_queue import (
     AIWorkQueue,
     AIWorkType,
 )
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
+from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
 from src.dss.infrastructure.telegram import TelegramClient
 from src.dss.settings import get_settings
-from src.integrations.llm_client import FallbackLLMClient
 from src.models.rejection_rule import RejectionRule
 from src.models.session import Session
-from src.services.ai_orchestrator import AIOrchestrator, AITaskType
 
 
 def test_llm_port_conformance() -> None:
@@ -442,7 +442,7 @@ async def test_in_memory_session_store_exercised_through_port() -> None:
 def test_work_queue_port_conformance() -> None:
     """Both queue backends expose the AIWorkQueue methods. issubclass needs
     no construction, so SQSAIWorkQueue is checked without a boto3 client."""
-    from src.services.ai_background import InMemoryAIWorkQueue, SQSAIWorkQueue
+    from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue, SQSAIWorkQueue
 
     assert issubclass(InMemoryAIWorkQueue, AIWorkQueue)
     assert issubclass(SQSAIWorkQueue, AIWorkQueue)
@@ -456,7 +456,7 @@ async def test_in_memory_ai_work_queue_exercised_through_port() -> None:
     they were enqueued, so a later item must not dequeue before an earlier
     one. The payload type AIWorkItem is also constructed and read through
     the port types to confirm the moved dataclass still round-trips."""
-    from src.services.ai_background import InMemoryAIWorkQueue
+    from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue
 
     queue: AIWorkQueue = InMemoryAIWorkQueue()
     assert isinstance(queue, AIWorkQueue)

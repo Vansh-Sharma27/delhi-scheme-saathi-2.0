@@ -5,10 +5,14 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from src.dss.application.conversation import sessions as session_manager
+from src.dss.application.conversation.background_memory import MemoryJobs
+from src.dss.application.ports.ai_tasks import AITasks
+from src.dss.application.ports.session_repository import SessionStore
+from src.dss.application.ports.work_queue import AIWorkQueue
 from src.dss.infrastructure.queues.work_queue import deserialize_work_item, serialize_work_item
 from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore, InMemorySessionStore
 from src.models.session import ConversationMemory, ConversationState, Session, UserProfile
-from src.services import ai_background, session_manager
 
 
 class FixedClock:
@@ -92,11 +96,13 @@ async def test_dynamodb_clock_fallback_preserves_stored_timestamp_and_ttl(monkey
 
 
 @pytest.mark.asyncio
-async def test_queue_clock_drives_enqueue_fallback_and_worker_lag(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_queue_clock_drives_enqueue_fallback_and_worker_lag() -> None:
     clock = FixedClock()
-    queue = AsyncMock()
-    monkeypatch.setattr(ai_background, "get_ai_work_queue", lambda: queue)
-    assert await ai_background.enqueue_memory_refresh("synthetic", 2, clock=clock)
+    queue = AsyncMock(spec=AIWorkQueue)
+    store = AsyncMock(spec=SessionStore)
+    orchestrator = AsyncMock(spec=AITasks)
+    jobs = MemoryJobs(store=store, ai=orchestrator, clock=clock, queue=queue)
+    assert await jobs.enqueue("synthetic", 2)
     item = queue.enqueue.call_args.args[0]
     assert item.enqueued_at == clock.now()
     payload = serialize_work_item(item)
@@ -105,17 +111,13 @@ async def test_queue_clock_drives_enqueue_fallback_and_worker_lag(monkeypatch: p
     assert deserialize_work_item(payload, clock=clock).enqueued_at == clock.now()
 
     session = Session(user_id="synthetic", pending_memory_job=True, completed_turn_count=2)
-    store = AsyncMock()
     store.get.return_value = session
-    orchestrator = AsyncMock()
     orchestrator.refresh_working_memory.return_value = ConversationMemory(summary="synthetic")
-    monkeypatch.setattr(ai_background, "get_session_store", lambda: store)
-    monkeypatch.setattr("src.services.ai_orchestrator.get_ai_orchestrator", lambda: orchestrator)
     clock.value += timedelta(seconds=3)
-    await ai_background.process_work_item(item, clock=clock)
+    await jobs.process(item)
     assert orchestrator.refresh_working_memory.call_args.kwargs["queue_lag_ms"] == 3000
     saved = store.save.call_args.args[0]
     assert saved.updated_at == clock.now() and not saved.pending_memory_job
     orchestrator.refresh_working_memory.side_effect = RuntimeError("synthetic failure")
-    await ai_background.process_work_item(item, clock=clock)
+    await jobs.process(item)
     assert not store.save.call_args.args[0].pending_memory_job

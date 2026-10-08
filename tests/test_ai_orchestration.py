@@ -5,15 +5,17 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.dss.application.ports.llm import LLMProvider, ProviderExecutionResult
-from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
-from src.models.session import ConversationMemory, Message, Session, UserProfile
-from src.services.ai_orchestrator import (
+from src.dss.application.conversation.ai_orchestrator import (
     AIExecutionPolicy,
     AIOrchestrator,
     AITaskType,
     LLMUsageEvent,
 )
+from src.dss.application.ports.llm import LLMProvider, ProviderExecutionResult
+from src.dss.infrastructure.ai.fallback_client import FallbackLLMClient
+from src.dss.settings import Settings
+from src.models.scheme import EligibilityCriteria, Scheme, SchemeMatch
+from src.models.session import ConversationMemory, Message, Session, UserProfile
 
 
 def _make_match(scheme_id: str, deterministic_score: float) -> SchemeMatch:
@@ -48,7 +50,13 @@ async def test_generate_response_includes_working_memory_context() -> None:
             latency_ms=12.0,
         )
     )
-    orchestrator = AIOrchestrator(llm_client=fake_llm)
+    orchestrator = AIOrchestrator(
+        llm_client=fake_llm,
+        settings=Settings(_env_file=None),
+        safe_analysis=FallbackLLMClient._safe_analysis_payload,
+        safe_relevance=FallbackLLMClient._safe_relevance_payload,
+        safe_generation=FallbackLLMClient._safe_generation_text,
+    )
     session = Session(
         user_id="user-memory-context",
         working_memory=ConversationMemory(
@@ -82,7 +90,13 @@ async def test_refresh_working_memory_builds_summary_and_scheme_context() -> Non
             latency_ms=18.0,
         )
     )
-    orchestrator = AIOrchestrator(llm_client=fake_llm)
+    orchestrator = AIOrchestrator(
+        llm_client=fake_llm,
+        settings=Settings(_env_file=None),
+        safe_analysis=FallbackLLMClient._safe_analysis_payload,
+        safe_relevance=FallbackLLMClient._safe_relevance_payload,
+        safe_generation=FallbackLLMClient._safe_generation_text,
+    )
     session = Session(
         user_id="user-refresh-memory",
         user_profile=UserProfile(life_event="HOUSING", annual_income=300000),
@@ -104,7 +118,13 @@ async def test_refresh_working_memory_builds_summary_and_scheme_context() -> Non
 
 def test_should_run_relevance_judge_only_for_ambiguous_matches() -> None:
     """AI relevance judging should be reserved for ambiguous deterministic rankings."""
-    orchestrator = AIOrchestrator(llm_client=AsyncMock(spec=LLMProvider))
+    orchestrator = AIOrchestrator(
+        llm_client=AsyncMock(spec=LLMProvider),
+        settings=Settings(_env_file=None),
+        safe_analysis=FallbackLLMClient._safe_analysis_payload,
+        safe_relevance=FallbackLLMClient._safe_relevance_payload,
+        safe_generation=FallbackLLMClient._safe_generation_text,
+    )
 
     assert orchestrator.should_run_relevance_judge(
         [_make_match("SCH-CLEAR", 0.97), _make_match("SCH-LOW", 0.60)]
@@ -137,6 +157,10 @@ async def test_analyze_message_enforces_deadline_cancels_and_records_timeout() -
     fake_llm.analyze_message_with_meta = AsyncMock(side_effect=slow_analysis)
     orchestrator = AIOrchestrator(
         llm_client=fake_llm,
+        settings=Settings(_env_file=None),
+        safe_analysis=FallbackLLMClient._safe_analysis_payload,
+        safe_relevance=FallbackLLMClient._safe_relevance_payload,
+        safe_generation=FallbackLLMClient._safe_generation_text,
         policies={
             AITaskType.ANALYZE_MESSAGE: AIExecutionPolicy(
                 timeout_seconds=0.01,
@@ -203,7 +227,14 @@ async def test_tasks_use_provider_metadata_despite_plain_method_override(
         error="provider diagnostic",
     )
     events: list[LLMUsageEvent] = []
-    orchestrator = AIOrchestrator(llm_client=provider, usage_sink=events.append)
+    orchestrator = AIOrchestrator(
+        llm_client=provider,
+        settings=Settings(_env_file=None),
+        safe_analysis=FallbackLLMClient._safe_analysis_payload,
+        safe_relevance=FallbackLLMClient._safe_relevance_payload,
+        safe_generation=FallbackLLMClient._safe_generation_text,
+        usage_sink=events.append,
+    )
     session = Session(
         user_id="metadata-user", messages=[Message(role="user", content="housing")],
     )

@@ -36,7 +36,14 @@ def _original_responses() -> ModuleType:
         ["git", "show", "a394923:src/services/response_generator.py"], cwd=ROOT
     ).decode("utf-8")
     module = ModuleType("phase5_original_responses")
-    exec(compile(source, "<original-responses>", "exec"), module.__dict__)
+    tree = ast.parse(source)
+    # The historical pure presenters never call the removed AI service.
+    # Keep their original bodies; omit only its unused import at load time.
+    tree.body = [
+        node for node in tree.body
+        if not (isinstance(node, ast.ImportFrom) and node.module == "src.services.ai_orchestrator")
+    ]
+    exec(compile(tree, "<original-responses>", "exec"), module.__dict__)
     return module
 
 
