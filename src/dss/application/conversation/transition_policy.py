@@ -1,11 +1,10 @@
 """Application policy for choosing the next conversation state."""
 
-from typing import Any
-
 from src.dss.application.conversation import fsm, intents, scheme_reference, turn_policy
 from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.models import ProfileUpdate, TurnAnalysis
 from src.dss.application.conversation.profile_fields import ProfileFields
+from src.dss.application.ports.responses import Responses
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 
@@ -103,7 +102,7 @@ class TransitionPolicy:
         lang: str,
         language_changed: bool,
         *,
-        responses: Any,
+        responses: Responses,
     ) -> tuple[Session, str] | None:
         if (
             language_changed

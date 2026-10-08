@@ -4,8 +4,9 @@ import sys
 
 import asyncpg
 
-from src.db.session_store import SessionStore
-from src.dss.application.conversation import intents, language, scheme_reference, turn_policy
+from src.db.session_store import SessionStore, get_session_store
+from src.dss.application.conversation import language as language
+from src.dss.application.conversation import scheme_reference, turn_policy
 from src.dss.application.conversation.commands import CommandHandler
 from src.dss.application.conversation.keyboards import (
     format_inline_keyboard,
@@ -62,7 +63,7 @@ class ConversationService:
         self.pool = db_pool
         self.settings = get_settings()
         self.ai = ai_orchestrator or get_ai_orchestrator()
-        self.session_store = session_store
+        self.session_store = session_store or get_session_store()
         self.clock = clock
         self.fields = ProfileFields(lambda: _load_catalog().values())
         self.turn_analyzer = TurnAnalyzer(
@@ -96,10 +97,7 @@ class ConversationService:
             run_matching=self._run_matching,
             profile_extractor=self.fields,
             response_generator=response_generator,
-            session_manager=session_manager,
-            views=views,
-            intents=intents,
-            language=language,
+            scope_response=views.build_multi_beneficiary_scope_response,
         )
         self.renderer = TurnRenderer(
             self.pool,
@@ -131,7 +129,7 @@ class ConversationService:
             session_store=self.session_store,
         )
         self.application = ConversationApplication(
-            dependencies=dependencies,
+            responses=response_generator,
             analyzer=self.turn_analyzer,
             language_policy=self.language_policy,
             profile_updates=self.profile_update_service,

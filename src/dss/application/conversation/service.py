@@ -1,7 +1,6 @@
 """One-turn application pipeline: deterministic policies override the LLM."""
 
-from typing import Any
-
+from src.dss.application.conversation import intents, language, sessions
 from src.dss.application.conversation.commands import CommandHandler
 from src.dss.application.conversation.contracts import ChatRequest, ChatResponse
 from src.dss.application.conversation.language_policy import LanguagePolicy
@@ -11,6 +10,10 @@ from src.dss.application.conversation.profile_update import ProfileUpdateService
 from src.dss.application.conversation.transition_policy import TransitionPolicy
 from src.dss.application.conversation.turn_analyzer import TurnAnalyzer
 from src.dss.application.conversation.turn_renderer import TurnRenderer
+from src.dss.application.conversation.validators import sanitize_input
+from src.dss.application.ports.clock import Clock
+from src.dss.application.ports.responses import Responses
+from src.dss.application.ports.session_repository import SessionStore
 from src.dss.domain.conversations.session import Session
 
 
@@ -18,7 +21,7 @@ class ConversationApplication:
     def __init__(
         self,
         *,
-        dependencies: Any,
+        responses: Responses,
         analyzer: TurnAnalyzer,
         language_policy: LanguagePolicy,
         profile_updates: ProfileUpdateService,
@@ -26,10 +29,10 @@ class ConversationApplication:
         renderer: TurnRenderer,
         commands: CommandHandler,
         persistence: TurnPersistence,
-        session_store: Any,
-        clock: Any,
+        session_store: SessionStore,
+        clock: Clock | None,
     ) -> None:
-        self.dependencies = dependencies
+        self.responses = responses
         self.turn_analyzer = analyzer
         self.language_policy = language_policy
         self.profile_update_service = profile_updates
@@ -42,7 +45,7 @@ class ConversationApplication:
 
     async def handle_message(self, request: ChatRequest) -> ChatResponse:
         """Handle one incoming user message and return the reply."""
-        session = await self.dependencies.session_manager.get_or_create_session(
+        session = await sessions.get_or_create_session(
             request.user_id,
             store=self.session_store,
             clock=self.clock,
@@ -54,7 +57,7 @@ class ConversationApplication:
         if request.message_type == "callback" and request.callback_data:
             return await self.commands._handle_callback(session, request.callback_data)
 
-        user_message = self.dependencies.sanitize_input(request.message)
+        user_message = sanitize_input(request.message)
         if not user_message:
             return ChatResponse(
                 text="मुझे आपका संदेश समझ नहीं आया। कृपया दोबारा लिखें।",
@@ -63,7 +66,7 @@ class ConversationApplication:
                 ),
             )
 
-        command = self.dependencies.intents.extract_supported_command(user_message)
+        command = intents.extract_supported_command(user_message)
         if command:
             return await self.commands._handle_command(session, command, user_message)
 
@@ -110,7 +113,7 @@ class ConversationApplication:
             and "life_event" in profile_update.changed_fields
             and profile_update.before_profile.life_event is None
         ):
-            response_text = self.dependencies.language.prepend_death_in_family_empathy(
+            response_text = language.prepend_death_in_family_empathy(
                 response_text, lang
             )
 
@@ -138,7 +141,7 @@ class ConversationApplication:
             analysis,
             lang,
             language_changed,
-            responses=self.dependencies.response_generator,
+            responses=self.responses,
         )
         if reset is None:
             return None

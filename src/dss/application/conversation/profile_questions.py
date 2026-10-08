@@ -1,11 +1,12 @@
 """Conversation application rendering."""
 
 from collections.abc import Awaitable, Callable
-from types import ModuleType
 
-from src.dss.application.conversation import profile_extractor
+from src.dss.application.conversation import intents, language, profile_extractor
+from src.dss.application.conversation import sessions as session_manager
 from src.dss.application.conversation.models import ProfileUpdate, RenderResult, TurnAnalysis
 from src.dss.application.conversation.profile_fields import ProfileFields
+from src.dss.application.ports.responses import Responses
 from src.dss.domain.conversations.session import Session
 from src.dss.domain.conversations.states import ConversationState
 from src.dss.domain.profiles.profile import UserProfile
@@ -20,19 +21,13 @@ class ProfileQuestionRenderer:
         *,
         run_matching: Callable[[UserProfile, str, Session, str], Awaitable[RenderResult]],
         profile_extractor: ProfileFields,
-        response_generator: ModuleType,
-        session_manager: ModuleType,
-        views: ModuleType,
-        intents: ModuleType,
-        language: ModuleType,
+        response_generator: Responses,
+        scope_response: Callable[[str], str],
     ) -> None:
         self._run_matching = run_matching
         self.profile_extractor = profile_extractor
         self.response_generator = response_generator
-        self.session_manager = session_manager
-        self.views = views
-        self.intents = intents
-        self.language = language
+        self.scope_response = scope_response
 
     async def _render_situation_understanding(
         self,
@@ -49,7 +44,7 @@ class ProfileQuestionRenderer:
                 analysis.llm_response_text
                 or self.response_generator.generate_clarification_response("life_event", lang)
             )
-            session = self.session_manager.set_currently_asking(session, "life_event")
+            session = session_manager.set_currently_asking(session, "life_event")
             return RenderResult(session, ConversationState.SITUATION_UNDERSTANDING, text)
 
         if self.profile_extractor.is_complete_for_matching(profile):
@@ -65,7 +60,7 @@ class ProfileQuestionRenderer:
         text = self.profile_extractor.get_next_question(
             profile, lang, session.skipped_fields
         ) or self.response_generator.generate_clarification_response("age", lang)
-        session = self.session_manager.set_currently_asking(
+        session = session_manager.set_currently_asking(
             session,
             self.profile_extractor.get_next_missing_field(profile, session.skipped_fields),
         )
@@ -83,7 +78,7 @@ class ProfileQuestionRenderer:
         profile = session.user_profile
 
         if not profile.life_event:
-            session = self.session_manager.set_currently_asking(session, "life_event")
+            session = session_manager.set_currently_asking(session, "life_event")
             return RenderResult(
                 session,
                 ConversationState.SITUATION_UNDERSTANDING,
@@ -106,7 +101,7 @@ class ProfileQuestionRenderer:
                 if analysis.action == "ask_field_reason"
                 else self.response_generator.generate_field_help_response(previously_asking, lang)
             )
-            session = self.session_manager.set_currently_asking(session, previously_asking)
+            session = session_manager.set_currently_asking(session, previously_asking)
             return RenderResult(session, ConversationState.PROFILE_COLLECTION, text)
 
         if analysis.action == "skip_field" and previously_asking:
@@ -142,11 +137,11 @@ class ProfileQuestionRenderer:
         skipped = list(session.skipped_fields)
         if skipped_field not in skipped:
             skipped.append(skipped_field)
-        session = self.session_manager.set_skipped_fields(session, skipped)
+        session = session_manager.set_skipped_fields(session, skipped)
 
         next_unskipped = self.profile_extractor.get_next_missing_field(profile, skipped)
         if next_unskipped:
-            session = self.session_manager.set_currently_asking(session, next_unskipped)
+            session = session_manager.set_currently_asking(session, next_unskipped)
             return RenderResult(
                 session,
                 ConversationState.PROFILE_COLLECTION,
@@ -154,7 +149,7 @@ class ProfileQuestionRenderer:
             )
 
         if no_new_matches_possible:
-            session = self.session_manager.set_currently_asking(session, None)
+            session = session_manager.set_currently_asking(session, None)
             return RenderResult(
                 session,
                 ConversationState.PROFILE_COLLECTION,
@@ -162,7 +157,7 @@ class ProfileQuestionRenderer:
             )
 
         outcome = await self._run_matching(profile, user_message, session, lang)
-        session = self.session_manager.set_currently_asking(outcome.session, None)
+        session = session_manager.set_currently_asking(outcome.session, None)
         return RenderResult(
             session,
             outcome.state,
@@ -188,7 +183,7 @@ class ProfileQuestionRenderer:
             profile, lang, session.skipped_fields
         )
         next_field = self.profile_extractor.get_next_missing_field(profile, session.skipped_fields)
-        scope_followup = self.intents.is_multi_beneficiary_scope_followup(
+        scope_followup = intents.is_multi_beneficiary_scope_followup(
             user_message, previously_asking
         )
 
@@ -218,7 +213,7 @@ class ProfileQuestionRenderer:
                 previously_asking, validation_error, lang
             )
         elif scope_followup:
-            text = self.views.build_multi_beneficiary_scope_response(lang)
+            text = self.scope_response(lang)
         elif translated_reask:
             text = (
                 self.profile_extractor.get_next_question(profile, lang, session.skipped_fields)
@@ -246,11 +241,11 @@ class ProfileQuestionRenderer:
         # Track the field being asked so the next turn can interpret a bare
         # answer in context.
         if validation_error or translated_reask:
-            session = self.session_manager.set_currently_asking(session, previously_asking)
+            session = session_manager.set_currently_asking(session, previously_asking)
         elif scope_followup:
-            session = self.session_manager.set_currently_asking(session, "life_event")
+            session = session_manager.set_currently_asking(session, "life_event")
         else:
-            session = self.session_manager.set_currently_asking(session, next_field)
+            session = session_manager.set_currently_asking(session, next_field)
 
         return RenderResult(session, state, text, schemes, inline_keyboard)
 
@@ -300,7 +295,7 @@ class ProfileQuestionRenderer:
         if still_waiting_for_field:
             return False
 
-        return not self.language.response_conflicts_with_spouse_reference(
+        return not language.response_conflicts_with_spouse_reference(
             user_message,
             analysis.llm_response_text,
         )
