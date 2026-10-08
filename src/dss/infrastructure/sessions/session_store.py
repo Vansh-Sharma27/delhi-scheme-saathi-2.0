@@ -7,6 +7,8 @@ reads use an optional clock only for missing timestamps. TTL remains derived
 from updated_at plus seven days, and DynamoDB saves never restamp the session.
 """
 
+from contextlib import suppress
+
 from src.dss.application.ports.clock import Clock
 from src.dss.application.ports.session_repository import (
     SessionStore as SessionStore,
@@ -52,7 +54,20 @@ class DynamoDBSessionStore:
         self._table_name = table_name
         self._clock = clock
         self._dynamodb = boto3.resource("dynamodb", region_name=region)
-        self._table = self._dynamodb.Table(table_name)
+        self._closed = False
+        try:
+            self._table = self._dynamodb.Table(table_name)
+        except BaseException:
+            # Preserve the construction error even if releasing the client fails.
+            with suppress(Exception):
+                self.close()
+            raise
+
+    def close(self) -> None:
+        """Release the owned SDK client's connections at most once."""
+        if not self._closed:
+            self._closed = True
+            self._dynamodb.meta.client.close()
 
     async def get(self, user_id: str) -> Session | None:
         """Get session by user ID."""

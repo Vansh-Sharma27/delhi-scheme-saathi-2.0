@@ -34,7 +34,7 @@ async def process_event(
 
 async def handle_event(event: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings=settings)
     async with worker_runtime(settings) as jobs:
         return await process_event(event, jobs.process)
 

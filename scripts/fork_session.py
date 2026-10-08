@@ -71,7 +71,7 @@ def _fail(message: str) -> NoReturn:
 def _require_shared_store() -> SessionStore:
     """Refuse to run against a store that cannot hold the app's sessions."""
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings=settings)
     store = build_session_store(settings)
     if isinstance(store, InMemorySessionStore):
         _fail(IN_MEMORY_HELP)

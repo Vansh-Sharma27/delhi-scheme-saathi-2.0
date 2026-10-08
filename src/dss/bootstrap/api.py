@@ -24,7 +24,7 @@ def create_app(settings: Settings) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         nonlocal dependencies
-        configure_logging(settings.log_level)
+        configure_logging(settings.log_level, settings=settings)
         async with api_runtime(settings) as runtime:
             dependencies = runtime.dependencies
             try:

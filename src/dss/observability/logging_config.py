@@ -23,9 +23,20 @@ class RedactingFilter(logging.Filter):
     def __init__(self, secrets: SecretProvider) -> None:
         super().__init__()
         self.secrets = secrets
+        self._retained: set[str] = set()
+
+    def update_secrets(self, secrets: SecretProvider) -> None:
+        # ponytail: retain distinct old credentials for this handler's lifetime so
+        # overlapping runtimes stay covered. No provider chains or runtime objects;
+        # storage grows only with distinct rotations, reclaimed with the handler.
+        self._retained.update(value for value in self.secrets() if len(value) >= 8)
+        self.secrets = secrets
 
     def filter(self, record: logging.LogRecord) -> bool:
-        secrets = self.secrets()
+        secrets = tuple(sorted(
+            self._retained | {value for value in self.secrets() if len(value) >= 8},
+            key=len, reverse=True,
+        ))
         if not secrets:
             return True
         message = record.getMessage()
@@ -41,8 +52,12 @@ class RedactingFilter(logging.Filter):
 
 
 def install_redaction(handler: logging.Handler, secrets: SecretProvider) -> None:
-    """Attach once to the handler so propagated module records are filtered."""
-    if not any(isinstance(existing, RedactingFilter) for existing in handler.filters):
+    """Attach once; refresh the provider without losing older runtime secrets."""
+    for existing in handler.filters:
+        if isinstance(existing, RedactingFilter):
+            existing.update_secrets(secrets)
+            break
+    else:
         handler.addFilter(RedactingFilter(secrets))
 
 

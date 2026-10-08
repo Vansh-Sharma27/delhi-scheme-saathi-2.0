@@ -30,7 +30,7 @@ class InvocationAPI:
 
 def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     settings = get_settings()
-    configure_logging(settings.log_level)
+    configure_logging(settings.log_level, settings=settings)
     with asyncio.Runner() as runner:
         asyncio.set_event_loop(runner.get_loop())
         return Mangum(InvocationAPI(settings), lifespan="off")(event, context)

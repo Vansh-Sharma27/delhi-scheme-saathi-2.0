@@ -34,6 +34,7 @@ from src.dss.infrastructure.database.catalog import _load_catalog, get_canonical
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM, FallbackEmbeddingClient
 from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue
 from src.dss.infrastructure.sessions.clock import SystemClock
+from src.dss.infrastructure.sessions.session_store import DynamoDBSessionStore
 from src.dss.infrastructure.speech.bhashini import BhashiniClient
 from src.dss.infrastructure.speech.sarvam import SarvamClient
 from src.dss.infrastructure.telegram import TelegramClient
@@ -103,6 +104,8 @@ async def api_runtime(settings: Settings) -> AsyncIterator[APIRuntime]:
             await verify_scheme_rows(pool)
         clock = SystemClock()
         store = build_session_store(settings, clock=clock)
+        if isinstance(store, DynamoDBSessionStore):
+            cleanup.callback(store.close)
         queue = build_work_queue(settings)
         if queue is not None:
             cleanup.push_async_callback(queue.close)
@@ -155,6 +158,8 @@ async def worker_runtime(settings: Settings) -> AsyncIterator[MemoryJobs]:
     async with AsyncExitStack() as cleanup:
         clock = SystemClock()
         store = build_worker_session_store(settings, clock=clock)
+        if isinstance(store, DynamoDBSessionStore):
+            cleanup.callback(store.close)
         llm = FallbackLLMClient(settings)
         cleanup.push_async_callback(llm.close)
         yield MemoryJobs(store, build_ai(settings, llm), clock, None)
