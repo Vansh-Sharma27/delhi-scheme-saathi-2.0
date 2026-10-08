@@ -1,15 +1,23 @@
 """Tests for application startup behavior."""
 
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
-from src import main as main_module
-from src.db.scheme_repo import get_scheme_debug_rows
-from src.services.ai_background import InMemoryAIWorkQueue
+from src.dss.application.conversation.contracts import ChatRequest, ChatResponse
+from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.application.ports.work_queue import AIWorkQueue
+from src.dss.bootstrap import api, runtime
+from src.dss.infrastructure.database.scheme_repo import get_scheme_debug_rows
+from src.dss.infrastructure.queues.work_queue import InMemoryAIWorkQueue
+from src.dss.interfaces.api.dependencies import APIDependencies
+from src.dss.interfaces.api.http import HTTPRoutes
+from src.dss.settings import CHAT_SESSION_PREFIX, Settings
 
 
 class _FakeRequest:
@@ -19,24 +27,60 @@ class _FakeRequest:
         self.headers = headers or {}
 
 
-def _capturing_service(captured: dict[str, str]):
-    """Conversation service double that records the session ID it is given."""
+def _chat_dependencies(captured: dict[str, str], api_key: str = "") -> APIDependencies:
+    async def chat(request: ChatRequest) -> ChatResponse:
+        captured["user_id"] = request.user_id
+        return ChatResponse(text="ok", next_state="GREETING")
 
-    class _Service:
-        def __init__(self, pool):  # type: ignore[no-untyped-def]
-            pass
+    return APIDependencies(
+        Settings(_env_file=None, chat_api_key=api_key),
+        AsyncMock(spec=SchemeRepository), None, None, None, chat, AsyncMock(),
+    )
 
-        async def handle_message(self, request):  # type: ignore[no-untyped-def]
-            captured["user_id"] = request.user_id
-            return SimpleNamespace(
-                text="ok",
-                next_state="GREETING",
-                schemes=None,
-                documents=None,
-                rejection_warnings=None,
-            )
 
-    return _Service
+@pytest.fixture
+def owned_runtime(monkeypatch):
+    """Exercise real resource ownership with network clients replaced at construction."""
+    settings = Settings(
+        _env_file=None, use_bedrock=False, session_table_name="dss-sessions",
+        ai_memory_queue_enabled=True, ai_memory_queue_backend="in_memory",
+        sarvam_api_key="", bhashini_api_key="", chat_api_key="",
+    )
+    connection = AsyncMock()
+    connection.fetchval.return_value = 7
+    connection.fetch.return_value = []
+    pool = Mock()
+    pool.acquire.return_value = _AcquireContext(connection)
+    pool.close = AsyncMock()
+    open_pool = AsyncMock(return_value=pool)
+    monkeypatch.setattr(runtime, "open_pool", open_pool)
+    queue = InMemoryAIWorkQueue()
+    monkeypatch.setattr(queue, "close", AsyncMock())
+    build_queue = Mock(return_value=queue)
+    monkeypatch.setattr(runtime, "build_work_queue", build_queue)
+    clients = []
+    for name in ("FallbackLLMClient", "FallbackEmbeddingClient", "SarvamClient", "TelegramClient"):
+        client = AsyncMock()
+        clients.append(client)
+        monkeypatch.setattr(runtime, name, Mock(return_value=client))
+    monkeypatch.setattr(runtime, "build_ai", Mock(return_value=AsyncMock()))
+    monkeypatch.setattr(runtime, "build_conversation", Mock(return_value=SimpleNamespace(
+        handle_message=AsyncMock(return_value=ChatResponse(text="ok")),
+    )))
+    graphs = []
+
+    @asynccontextmanager
+    async def capture_runtime(settings):
+        async with runtime.api_runtime(settings) as graph:
+            graphs.append(graph)
+            yield graph
+
+    monkeypatch.setattr(api, "api_runtime", capture_runtime)
+    monkeypatch.setattr(api, "configure_logging", Mock())
+    return SimpleNamespace(
+        settings=settings, pool=pool, open_pool=open_pool, queue=queue,
+        build_queue=build_queue, clients=clients, graphs=graphs,
+    )
 
 
 class _FakeConn:
@@ -145,74 +189,107 @@ async def test_get_scheme_debug_rows_handles_stringified_eligibility() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_keeps_db_pool_when_verification_logging_fails() -> None:
+async def test_lifespan_keeps_db_pool_when_verification_logging_fails(owned_runtime) -> None:
     """Startup verification failures should not mark the database as disconnected."""
-    fake_pool = AsyncMock()
-    fake_pool.close = AsyncMock()
-    configure_ai = AsyncMock()
-    shutdown_ai = AsyncMock()
-
-    with patch.object(main_module, "init_db_pool", AsyncMock(return_value=fake_pool)), patch(
-        "src.db.scheme_repo.get_scheme_debug_rows",
+    resources = owned_runtime
+    app = api.create_app(resources.settings)
+    routes = next(route.endpoint.__self__ for route in app.routes if route.path == "/health")
+    with patch.object(
+        runtime.PostgresSchemeRepository, "get_scheme_debug_rows",
         AsyncMock(side_effect=KeyError("name_hindi")),
-    ), patch.object(main_module, "_configure_session_store", lambda: None), patch.object(
-        main_module,
-        "_configure_ai_background_runtime",
-        configure_ai,
-    ), patch.object(
-        main_module,
-        "_shutdown_ai_background_runtime",
-        shutdown_ai,
-    ):
-        main_module.db_pool = None
-        async with main_module.lifespan(main_module.app):
-            assert main_module.db_pool is fake_pool
+    ) as verify:
+        async with app.router.lifespan_context(app):
+            graph = resources.graphs[0]
+            assert graph.dependencies.schemes._pool is resources.pool
+            assert await routes.health_check() == {
+                "status": "ok", "database": "connected", "schemes_count": 7,
+            }
+            assert graph.worker is not None
+            task = graph.worker._task
+            assert task is not None
+            resources.pool.close.assert_not_awaited()
 
-        assert main_module.db_pool is None
-        fake_pool.close.assert_awaited_once()
-        configure_ai.assert_awaited_once()
-        shutdown_ai.assert_awaited_once()
+    verify.assert_awaited_once_with(["SCH-DELHI-001", "SCH-DELHI-006"])
+    resources.open_pool.assert_awaited_once_with(resources.settings)
+    resources.build_queue.assert_called_once_with(resources.settings)
+    assert task.cancelled()
+    assert graph.worker._task is None
+    with pytest.raises(RuntimeError, match="API lifespan has not started"):
+        _ = routes.dependencies
+    resources.pool.close.assert_awaited_once()
+    resources.queue.close.assert_awaited_once()
+    for client in resources.clients:
+        client.close.assert_awaited_once()
+
+
+def test_lifespan_handles_pool_initialization_failure(owned_runtime) -> None:
+    resources = owned_runtime
+    resources.open_pool.side_effect = OSError("database unavailable")
+    with TestClient(api.create_app(resources.settings)) as client:
+        health = client.get("/health")
+        assert health.status_code == 200
+        assert health.json() == {
+            "status": "ok", "database": "disconnected", "schemes_count": 0,
+        }
+        response = client.post("/api/chat", json={"message": "Namaste"})
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Database connection not available"}
+        graph = resources.graphs[0]
+        assert graph.dependencies.schemes is None
+        assert graph.worker is not None
+        task = graph.worker._task
+        assert task is not None
+
+    resources.open_pool.assert_awaited_once_with(resources.settings)
+    resources.pool.close.assert_not_awaited()
+    assert task.cancelled()
+    assert graph.worker._task is None
+    resources.queue.close.assert_awaited_once()
+    for client in resources.clients:
+        client.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_configure_ai_background_runtime_starts_in_memory_worker() -> None:
+async def test_configure_ai_background_runtime_starts_in_memory_worker(owned_runtime) -> None:
     """Local in-memory queue should start the in-process worker."""
-    start_worker = AsyncMock()
+    resources = owned_runtime
+    async with runtime.api_runtime(resources.settings) as graph:
+        assert graph.queue is resources.queue
+        assert graph.memory.queue is resources.queue
+        assert graph.worker is None
+        await graph.start_local_worker()
+        assert graph.worker is not None
+        assert graph.worker.queue is resources.queue
+        task = graph.worker._task
+        assert task is not None
+        assert not task.done()
+        await graph.start_local_worker()
+        assert graph.worker._task is task
 
-    with patch(
-        "src.services.ai_background.create_default_ai_work_queue",
-        return_value=InMemoryAIWorkQueue(),
-    ), patch(
-        "src.services.ai_background.configure_ai_work_queue",
-    ) as configure_queue, patch(
-        "src.services.ai_background.start_ai_background_worker",
-        start_worker,
-    ):
-        await main_module._configure_ai_background_runtime()
-
-    configure_queue.assert_called_once()
-    start_worker.assert_awaited_once()
+    resources.build_queue.assert_called_once_with(resources.settings)
+    assert task.cancelled()
+    assert graph.worker._task is None
+    resources.queue.close.assert_awaited_once()
+    resources.pool.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_configure_ai_background_runtime_skips_worker_for_external_queue() -> None:
+async def test_configure_ai_background_runtime_skips_worker_for_external_queue(owned_runtime) -> None:
     """Shared queues like SQS should not start an in-process poller in the web app."""
-    start_worker = AsyncMock()
-    external_queue = object()
+    resources = owned_runtime
+    external_queue = AsyncMock(spec=AIWorkQueue)
+    resources.build_queue.return_value = external_queue
+    with patch.object(runtime, "LocalMemoryWorker") as worker:
+        async with runtime.api_runtime(resources.settings) as graph:
+            assert graph.queue is external_queue
+            assert graph.memory.queue is external_queue
+            await graph.start_local_worker()
+            assert graph.worker is None
+        worker.assert_not_called()
 
-    with patch(
-        "src.services.ai_background.create_default_ai_work_queue",
-        return_value=external_queue,
-    ), patch(
-        "src.services.ai_background.configure_ai_work_queue",
-    ) as configure_queue, patch(
-        "src.services.ai_background.start_ai_background_worker",
-        start_worker,
-    ):
-        await main_module._configure_ai_background_runtime()
-
-    configure_queue.assert_called_once_with(external_queue)
-    start_worker.assert_not_awaited()
+    resources.build_queue.assert_called_once_with(resources.settings)
+    external_queue.close.assert_awaited_once()
+    resources.pool.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -230,14 +307,10 @@ async def test_chat_endpoint_namespaces_caller_supplied_user_id(
     """Always prefix after truncation, including already-prefixed caller IDs."""
     captured: dict[str, str] = {}
 
-    with patch.object(main_module, "get_db_pool", lambda: object()), patch.object(
-        main_module, "get_settings", lambda: SimpleNamespace(chat_api_key="")
-    ), patch(
-        "src.services.conversation.ConversationService", _capturing_service(captured)
-    ):
-        await main_module.chat_endpoint(
-            {"user_id": user_id, "message": "Namaste"}, _FakeRequest()
-        )
+    routes = HTTPRoutes(_chat_dependencies(captured))
+    await routes.chat_endpoint(
+        {"user_id": user_id, "message": "Namaste"}, _FakeRequest()
+    )
 
     assert captured["user_id"] != user_id
     assert captured["user_id"] == expected
@@ -248,17 +321,13 @@ async def test_chat_endpoint_rejects_wrong_api_key() -> None:
     """With CHAT_API_KEY set, a bad or missing header must not reach the service."""
     captured: dict[str, str] = {}
 
-    with patch.object(main_module, "get_db_pool", lambda: object()), patch.object(
-        main_module, "get_settings", lambda: SimpleNamespace(chat_api_key="expected-key")
-    ), patch(
-        "src.services.conversation.ConversationService", _capturing_service(captured)
-    ):
-        for headers in ({}, {"X-API-Key": "wrong-key"}):
-            with pytest.raises(HTTPException) as excinfo:
-                await main_module.chat_endpoint(
-                    {"user_id": "tester", "message": "Namaste"}, _FakeRequest(headers)
-                )
-            assert excinfo.value.status_code == 403
+    routes = HTTPRoutes(_chat_dependencies(captured, "expected-key"))
+    for headers in ({}, {"X-API-Key": "wrong-key"}):
+        with pytest.raises(HTTPException) as excinfo:
+            await routes.chat_endpoint(
+                {"user_id": "tester", "message": "Namaste"}, _FakeRequest(headers)
+            )
+        assert excinfo.value.status_code == 403
 
     assert captured == {}
 
@@ -268,40 +337,70 @@ async def test_chat_endpoint_accepts_correct_api_key() -> None:
     """The matching header still gets through to the conversation service."""
     captured: dict[str, str] = {}
 
-    with patch.object(main_module, "get_db_pool", lambda: object()), patch.object(
-        main_module, "get_settings", lambda: SimpleNamespace(chat_api_key="expected-key")
-    ), patch(
-        "src.services.conversation.ConversationService", _capturing_service(captured)
-    ):
-        result = await main_module.chat_endpoint(
-            {"user_id": "tester", "message": "Namaste"},
-            _FakeRequest({"X-API-Key": "expected-key"}),
-        )
+    routes = HTTPRoutes(_chat_dependencies(captured, "expected-key"))
+    result = await routes.chat_endpoint(
+        {"user_id": "tester", "message": "Namaste"},
+        _FakeRequest({"X-API-Key": "expected-key"}),
+    )
 
     assert result["response"] == "ok"
-    assert captured["user_id"] == f"{main_module.CHAT_SESSION_PREFIX}tester"
+    assert captured["user_id"] == f"{CHAT_SESSION_PREFIX}tester"
 
 
-def test_chat_route_binds_body_and_namespaces_over_http() -> None:
+def test_chat_route_binds_body_and_namespaces_over_http(monkeypatch) -> None:
     """Cover the routed path, not just a direct call.
 
     The endpoint takes both a JSON body and the Request object; a signature
     change can keep direct calls working while breaking FastAPI's body binding.
     """
-    from fastapi.testclient import TestClient
-
     captured: dict[str, str] = {}
+    dependencies = _chat_dependencies(captured)
+    start_worker = AsyncMock()
 
-    with patch.object(main_module, "get_db_pool", lambda: object()), patch.object(
-        main_module, "get_settings", lambda: SimpleNamespace(chat_api_key="")
-    ), patch(
-        "src.services.conversation.ConversationService", _capturing_service(captured)
-    ):
-        client = TestClient(main_module.app)
+    @asynccontextmanager
+    async def fake_runtime(settings):
+        assert settings is dependencies.settings
+        yield SimpleNamespace(dependencies=dependencies, start_local_worker=start_worker)
+
+    monkeypatch.setattr(api, "api_runtime", fake_runtime)
+    monkeypatch.setattr(api, "configure_logging", Mock())
+    with TestClient(api.create_app(dependencies.settings)) as client:
         response = client.post(
             "/api/chat", json={"user_id": "780045592", "message": "Namaste"}
         )
 
     assert response.status_code == 200
     assert response.json()["response"] == "ok"
+    assert response.json() == {
+        "response": "ok", "next_state": "GREETING", "schemes": [],
+        "documents": [], "rejection_warnings": [],
+    }
     assert captured["user_id"] == "api:780045592"
+    start_worker.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    ("configured", "allowed_origin"),
+    [("", "http://localhost:3000"), (" https://example.test, ", "https://example.test")],
+)
+def test_create_app_cors_policy(configured: str, allowed_origin: str) -> None:
+    settings = Settings(_env_file=None, cors_allowed_origins=configured)
+    client = TestClient(api.create_app(settings))
+    response = client.options("/api/chat", headers={
+        "Origin": allowed_origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type, Authorization",
+    })
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == allowed_origin
+    assert response.headers["access-control-allow-methods"] == "GET, POST"
+    assert "access-control-allow-credentials" not in response.headers
+    allowed_headers = response.headers["access-control-allow-headers"].lower()
+    assert "content-type" in allowed_headers
+    assert "authorization" in allowed_headers
+    rejected = client.options("/api/chat", headers={
+        "Origin": "https://untrusted.test",
+        "Access-Control-Request-Method": "POST",
+    })
+    assert rejected.status_code == 400
+    assert "access-control-allow-origin" not in rejected.headers
