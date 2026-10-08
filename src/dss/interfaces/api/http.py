@@ -2,6 +2,7 @@
 
 import logging
 import secrets
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 from fastapi import HTTPException, Query, Request
@@ -22,8 +23,12 @@ def require_repository(repository: T | None) -> T:
 
 
 class HTTPRoutes:
-    def __init__(self, dependencies: APIDependencies) -> None:
-        self.dependencies = dependencies
+    def __init__(self, dependencies: APIDependencies | Callable[[], APIDependencies]) -> None:
+        self._dependencies = dependencies
+
+    @property
+    def dependencies(self) -> APIDependencies:
+        return self._dependencies() if callable(self._dependencies) else self._dependencies
 
     async def health_check(self) -> dict[str, Any]:
         result: dict[str, Any] = {"status": "ok", "database": "disconnected", "schemes_count": 0}
