@@ -16,7 +16,7 @@ def main() -> None:
     port = os.getenv("APP_PORT", "8000")
     os.execvp(
         "uvicorn",
-        ["uvicorn", "src.main:app", "--host", host, "--port", port],
+        ["uvicorn", "src.dss.bootstrap.api:app", "--host", host, "--port", port],
     )
 
 

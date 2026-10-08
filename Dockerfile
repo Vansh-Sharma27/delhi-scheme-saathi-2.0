@@ -25,6 +25,6 @@ ENV PYTHONUNBUFFERED=1
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8000/health')" || exit 1
 
-# Run the app
+# Seed bundled data, then run src.dss.bootstrap.api through the container launcher
 EXPOSE 8000
 CMD ["python", "-m", "scripts.container_start"]

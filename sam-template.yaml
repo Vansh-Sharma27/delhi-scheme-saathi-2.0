@@ -148,7 +148,7 @@ Resources:
     Properties:
       FunctionName: !Sub delhi-scheme-saathi-${Stage}
       CodeUri: .
-      Handler: src.lambda_handler.handler
+      Handler: src.dss.bootstrap.lambda_api.handler
       Description: Delhi Scheme Saathi API - Telegram webhook handler
       Environment:
         Variables:
@@ -239,7 +239,7 @@ Resources:
     Properties:
       FunctionName: !Sub delhi-scheme-saathi-memory-worker-${Stage}
       CodeUri: .
-      Handler: src.memory_worker_handler.handler
+      Handler: src.dss.bootstrap.memory_worker.handler
       Description: Delhi Scheme Saathi working-memory refresh worker
       Timeout: 60
       MemorySize: 512

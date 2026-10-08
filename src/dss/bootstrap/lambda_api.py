@@ -7,9 +7,9 @@ from fastapi import FastAPI
 from mangum import Mangum
 from starlette.types import Receive, Scope, Send
 
-from src.dss.bootstrap.api import register_routes
 from src.dss.bootstrap.logging import configure_logging
 from src.dss.bootstrap.runtime import api_runtime
+from src.dss.interfaces.api.app import register_routes
 from src.dss.interfaces.api.http import HTTPRoutes
 from src.dss.settings import Settings, get_settings
 

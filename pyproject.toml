@@ -45,6 +45,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/dss/infrastructure/ai/prompts/analysis_system_prompt.txt" = "src/dss/infrastructure/ai/prompts/analysis_system_prompt.txt"
+"src/dss/infrastructure/ai/prompts/generate_response.txt" = "src/dss/infrastructure/ai/prompts/generate_response.txt"
+"src/dss/infrastructure/ai/prompts/system_prompt.txt" = "src/dss/infrastructure/ai/prompts/system_prompt.txt"
+"data/all_schemes.json" = "data/all_schemes.json"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

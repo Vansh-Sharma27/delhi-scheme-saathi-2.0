@@ -38,7 +38,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./src:/app/src:ro
+      - ./src/dss:/app/src/dss:ro
       - ./data:/app/data:ro
     restart: unless-stopped
 
