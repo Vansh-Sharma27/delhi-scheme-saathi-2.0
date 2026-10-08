@@ -11,14 +11,17 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-from src import main
 from src.dss.application.guidance import presenters
+from src.dss.application.ports.scheme_repository import SchemeRepository
+from src.dss.bootstrap import api, lambda_api
 from src.dss.domain.eligibility.presentation_facts import EligibilityFacts
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme
-from src.dss.interfaces.telegram import handler
+from src.dss.interfaces.api.dependencies import APIDependencies
+from src.dss.interfaces.api.http import HTTPRoutes
+from src.dss.interfaces.telegram.dispatch import TelegramHandler
+from src.dss.settings import Settings
 from src.services import response_generator
-from src.webhook import handler as legacy_handler
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -122,41 +125,60 @@ def test_phase5_physical_line_limits() -> None:
         assert len((ROOT / relative).read_text(encoding="utf-8").splitlines()) < 300
 
 
-def test_legacy_telegram_module_is_live_interface_alias() -> None:
-    assert legacy_handler is handler
+def test_telegram_dispatch_is_owned_by_canonical_interface() -> None:
+    notifier, speech, store, clock, conversation = (AsyncMock() for _ in range(5))
+    dispatch = TelegramHandler(notifier, speech, store, clock, conversation)
+    assert dispatch.handle.__module__ == "src.dss.interfaces.telegram.dispatch"
+    assert dispatch.notifier is notifier
+    assert dispatch.speech is speech
+    assert dispatch.store is store
+    assert dispatch.clock is clock
+    assert dispatch.conversation is conversation
 
 
 def test_http_routes_are_owned_by_interface() -> None:
     endpoints = [
         route.endpoint
-        for route in main.app.routes
+        for route in api.app.routes
         if getattr(route, "path", "").startswith(("/api/", "/webhook/", "/health"))
     ]
     assert len(endpoints) == 8
-    assert all(endpoint.__module__ == "src.dss.interfaces.api.routes" for endpoint in endpoints)
+    assert all(endpoint.__module__ == "src.dss.interfaces.api.http" for endpoint in endpoints)
+    assert all(isinstance(endpoint.__self__, HTTPRoutes) for endpoint in endpoints)
 
 
-def test_http_webhook_dispatch_preserves_legacy_patch_point(monkeypatch) -> None:
+def test_http_webhook_dispatch_uses_injected_dependency(monkeypatch) -> None:
     update = {"update_id": 123}
     dispatch = AsyncMock(return_value={"status": "ok"})
-    pool = object()
-    monkeypatch.setattr(main, "get_db_pool", lambda: pool)
-    monkeypatch.setattr(main, "get_settings", lambda: SimpleNamespace(telegram_webhook_secret=""))
-    monkeypatch.setattr(legacy_handler, "handle_telegram_update", dispatch)
-    response = TestClient(main.app).post("/webhook/telegram", json=update)
+    settings = Settings(_env_file=None, telegram_webhook_secret="")
+    dependencies = APIDependencies(
+        settings, AsyncMock(spec=SchemeRepository), None, None, None, AsyncMock(), dispatch,
+    )
+
+    @asynccontextmanager
+    async def isolated_runtime(runtime_settings):
+        assert runtime_settings is settings
+        yield SimpleNamespace(dependencies=dependencies, start_local_worker=AsyncMock())
+
+    monkeypatch.setattr(api, "api_runtime", isolated_runtime)
+    with TestClient(api.create_app(settings)) as client:
+        response = client.post("/webhook/telegram", json=update)
     assert response.status_code == 200
-    dispatch.assert_awaited_once_with(update, pool)
+    assert response.json() == {"status": "ok"}
+    dispatch.assert_awaited_once_with(update)
 
 
 def test_lambda_handler_serves_relocated_health_route(monkeypatch) -> None:
-    from src.lambda_handler import handler as lambda_handler
+    settings = Settings(_env_file=None)
+    dependencies = APIDependencies(settings, None, None, None, None, AsyncMock(), AsyncMock())
 
     @asynccontextmanager
-    async def isolated_lifespan(app):
-        yield
+    async def isolated_runtime(runtime_settings):
+        assert runtime_settings is settings
+        yield SimpleNamespace(dependencies=dependencies)
 
-    monkeypatch.setattr(main.app.router, "lifespan_context", isolated_lifespan)
-    monkeypatch.setattr(main, "db_pool", None)
+    monkeypatch.setattr(lambda_api, "get_settings", lambda: settings)
+    monkeypatch.setattr(lambda_api, "api_runtime", isolated_runtime)
     event = {
         "version": "2.0",
         "routeKey": "GET /health",
@@ -169,6 +191,6 @@ def test_lambda_handler_serves_relocated_health_route(monkeypatch) -> None:
         },
         "isBase64Encoded": False,
     }
-    response = lambda_handler(event, SimpleNamespace())
+    response = lambda_api.handler(event, SimpleNamespace())
     assert response["statusCode"] == 200
     assert '"status":"ok"' in response["body"]

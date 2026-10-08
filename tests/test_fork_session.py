@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from scripts import fork_session
-from src import main as main_module
+from src.dss.bootstrap.sessions import build_session_store
 from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
 from src.dss.settings import CHAT_SESSION_PREFIX
 from src.models.session import ConversationState, Message, Session, UserProfile
@@ -15,9 +15,8 @@ from src.models.session import ConversationState, Message, Session, UserProfile
 
 def test_fork_shares_canonical_prefix_and_existing_store_wiring() -> None:
     assert CHAT_SESSION_PREFIX == "api:"
-    assert main_module.CHAT_SESSION_PREFIX is CHAT_SESSION_PREFIX
     assert fork_session.CHAT_SESSION_PREFIX is CHAT_SESSION_PREFIX
-    assert fork_session.build_session_store is main_module.build_session_store
+    assert fork_session.build_session_store is build_session_store
     assert fork_session.build_session_store.__module__ == "src.dss.bootstrap.sessions"
 
 

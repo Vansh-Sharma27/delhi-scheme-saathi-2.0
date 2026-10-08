@@ -42,7 +42,7 @@ def test_api_init_failure_falls_back_but_worker_failure_propagates(monkeypatch) 
 
 def test_fork_import_does_not_construct_web_application() -> None:
     result = subprocess.run(
-        [sys.executable, "-c", "import sys; import scripts.fork_session; assert 'src.main' not in sys.modules; assert 'fastapi' not in sys.modules"],
+        [sys.executable, "-c", "import sys; import scripts.fork_session; assert 'src.dss.bootstrap.api' not in sys.modules; assert 'src.dss.bootstrap.lambda_api' not in sys.modules; assert 'fastapi' not in sys.modules"],
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stderr
