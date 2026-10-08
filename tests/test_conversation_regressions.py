@@ -17,6 +17,7 @@ from src.models.session import ConversationState, Message, Session, UserProfile
 from src.services import response_generator
 from src.services.conversation import ConversationService
 from src.services.conversation.views import truncate_at_sentence
+from tests.conversation_fakes import ConversationFixture
 
 ACTIVE_SCHEME_SEEDS = [
     {
@@ -77,10 +78,15 @@ def reset_session_store() -> None:
     configure_session_store(InMemorySessionStore())
 
 
+@pytest.fixture
+def graph():
+    return ConversationFixture()
+
+
 @pytest.mark.asyncio
-async def test_explicit_language_lock_persists_across_turns_and_start() -> None:
+async def test_explicit_language_lock_persists_across_turns_and_start(graph) -> None:
     """Explicit language choice should stay sticky across later turns and /start."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         side_effect=[
             {
@@ -114,7 +120,7 @@ async def test_explicit_language_lock_persists_across_turns_and_start() -> None:
         ChatRequest(user_id="user-lock", message="/start")
     )
 
-    session = await get_session_store().get("user-lock")
+    session = await graph.store.get("user-lock")
     assert first.language == "en"
     assert second.language == "en"
     assert "age" in second.text.lower()
@@ -125,9 +131,9 @@ async def test_explicit_language_lock_persists_across_turns_and_start() -> None:
 
 
 @pytest.mark.asyncio
-async def test_explicit_language_request_does_not_fall_into_farewell_when_llm_mislabels_goodbye() -> None:
+async def test_explicit_language_request_does_not_fall_into_farewell_when_llm_mislabels_goodbye(graph) -> None:
     """Language-only requests should not end the conversation even if the LLM says goodbye."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "goodbye",
@@ -144,7 +150,7 @@ async def test_explicit_language_request_does_not_fall_into_farewell_when_llm_mi
         ChatRequest(user_id="user-language-not-farewell", message="Please use English only.")
     )
 
-    session = await get_session_store().get("user-language-not-farewell")
+    session = await graph.store.get("user-language-not-farewell")
     assert "Take care" not in result.text
     assert "assistance do you need" in result.text
     assert result.language == "en"
@@ -154,16 +160,16 @@ async def test_explicit_language_request_does_not_fall_into_farewell_when_llm_mi
 
 
 @pytest.mark.asyncio
-async def test_help_command_returns_bilingual_guide_for_new_user_without_llm() -> None:
+async def test_help_command_returns_bilingual_guide_for_new_user_without_llm(graph) -> None:
     """New users should get a deterministic bilingual help guide from /help."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock()
 
     result = await service.handle_message(
         ChatRequest(user_id="user-help-new", message="/help")
     )
 
-    session = await get_session_store().get("user-help-new")
+    session = await graph.store.get("user-help-new")
     assert result.next_state == ConversationState.GREETING.value
     assert result.language == "en"
     assert "ENGLISH" in result.text
@@ -180,16 +186,16 @@ async def test_help_command_returns_bilingual_guide_for_new_user_without_llm() -
 
 
 @pytest.mark.asyncio
-async def test_language_command_returns_picker_without_llm() -> None:
+async def test_language_command_returns_picker_without_llm(graph) -> None:
     """The /language command should show inline language choices deterministically."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock()
 
     result = await service.handle_message(
         ChatRequest(user_id="user-language-picker", message="/language")
     )
 
-    session = await get_session_store().get("user-language-picker")
+    session = await graph.store.get("user-language-picker")
     assert result.next_state == ConversationState.GREETING.value
     assert result.language == "en"
     assert "Choose your preferred language" in result.text
@@ -205,9 +211,9 @@ async def test_language_command_returns_picker_without_llm() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unlocked_previous_language_does_not_bias_english_turn() -> None:
+async def test_unlocked_previous_language_does_not_bias_english_turn(graph) -> None:
     """Observed language should drive unlocked sessions on later turns."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-unlocked-language",
@@ -218,7 +224,7 @@ async def test_unlocked_previous_language_does_not_bias_english_turn() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -247,9 +253,9 @@ async def test_unlocked_previous_language_does_not_bias_english_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_unlocked_hindi_bare_age_reply_preserves_language_context() -> None:
+async def test_unlocked_hindi_bare_age_reply_preserves_language_context(graph) -> None:
     """Bare-value field replies should keep the active Hindi language in unlocked sessions."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-unlocked-hi-bare-age",
@@ -264,7 +270,7 @@ async def test_unlocked_hindi_bare_age_reply_preserves_language_context() -> Non
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -292,9 +298,9 @@ async def test_unlocked_hindi_bare_age_reply_preserves_language_context() -> Non
 
 
 @pytest.mark.asyncio
-async def test_locked_hinglish_rewrites_hindi_llm_reply_into_hinglish() -> None:
+async def test_locked_hinglish_rewrites_hindi_llm_reply_into_hinglish(graph) -> None:
     """Locked Hinglish sessions should not leak Hindi-script LLM replies."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-hinglish-rewrite",
@@ -304,7 +310,7 @@ async def test_locked_hinglish_rewrites_hindi_llm_reply_into_hinglish() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -321,10 +327,7 @@ async def test_locked_hinglish_rewrites_hindi_llm_reply_into_hinglish() -> None:
         return_value="Main aapki madad kar sakta hoon. Apni age batayiye."
     )
 
-    with patch(
-        "src.services.response_generator.get_ai_orchestrator",
-        return_value=mock_ai,
-    ):
+    with patch.object(service.responses, "ai", mock_ai):
         result = await service.handle_message(
             ChatRequest(user_id="user-hinglish-rewrite", message="Mujhe help chahiye")
         )
@@ -336,9 +339,9 @@ async def test_locked_hinglish_rewrites_hindi_llm_reply_into_hinglish() -> None:
 
 
 @pytest.mark.asyncio
-async def test_why_question_explains_and_reasks_same_field() -> None:
+async def test_why_question_explains_and_reasks_same_field(graph) -> None:
     """Why-style objections should explain the field instead of falling into a loop."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         side_effect=[
             {
@@ -369,7 +372,7 @@ async def test_why_question_explains_and_reasks_same_field() -> None:
         ChatRequest(user_id="user-why", message="What's the matter of age here?")
     )
 
-    session = await get_session_store().get("user-why")
+    session = await graph.store.get("user-why")
     assert "eligibility" in result.text.lower()
     assert "age" in result.text.lower()
     assert session is not None
@@ -377,9 +380,9 @@ async def test_why_question_explains_and_reasks_same_field() -> None:
 
 
 @pytest.mark.asyncio
-async def test_skip_field_does_not_get_reasked_next_turn() -> None:
+async def test_skip_field_does_not_get_reasked_next_turn(graph) -> None:
     """Skipped fields should remain skipped until the topic changes."""
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         side_effect=[
             {
@@ -422,7 +425,7 @@ async def test_skip_field_does_not_get_reasked_next_turn() -> None:
         ChatRequest(user_id="user-skip", message="OBC")
     )
 
-    session = await get_session_store().get("user-skip")
+    session = await graph.store.get("user-skip")
     assert "income" in skipped.text.lower()
     assert "income" in after_category.text.lower()
     assert session is not None
@@ -431,9 +434,9 @@ async def test_skip_field_does_not_get_reasked_next_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_detail_language_change_stays_in_details() -> None:
+async def test_detail_language_change_stays_in_details(graph) -> None:
     """Asking for details in another language should not jump to application flow."""
-    store = get_session_store()
+    store = graph.store
     seed = Session(
         user_id="user-details",
         state=ConversationState.SCHEME_DETAILS,
@@ -449,7 +452,7 @@ async def test_detail_language_change_stays_in_details() -> None:
     )
     await store.save(seed)
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -473,15 +476,14 @@ async def test_detail_language_change_stays_in_details() -> None:
             "अगला क्या देखें: दस्तावेज, अस्वीकृति चेतावनियाँ, या आवेदन प्रक्रिया?"
         )
     )
-    with patch("src.services.conversation.views.scheme_repo.get_scheme_by_id", AsyncMock(return_value=scheme)), patch(
-        "src.services.conversation.views.document_resolver.resolve_documents_for_scheme",
+    with patch.object(service.schemes, "get_scheme_by_id", AsyncMock(return_value=scheme)), patch.object(
+        service.views, "resolve_documents",
         AsyncMock(return_value=[]),
-    ), patch(
-        "src.services.conversation.views.rejection_engine.get_rejection_warnings",
+    ), patch.object(
+        service.rules, "get_rules_by_scheme",
         AsyncMock(return_value=[]),
-    ), patch(
-        "src.services.response_generator.get_ai_orchestrator",
-        return_value=mock_ai,
+    ), patch.object(
+        service.responses, "ai", mock_ai,
     ):
         result = await service.handle_message(
             ChatRequest(
@@ -501,9 +503,9 @@ async def test_detail_language_change_stays_in_details() -> None:
 
 
 @pytest.mark.asyncio
-async def test_start_over_action_resets_state_but_keeps_locked_language() -> None:
+async def test_start_over_action_resets_state_but_keeps_locked_language(graph) -> None:
     """Natural-language restart requests should fully reset the flow."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-restart",
@@ -523,7 +525,7 @@ async def test_start_over_action_resets_state_but_keeps_locked_language() -> Non
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -552,9 +554,9 @@ async def test_start_over_action_resets_state_but_keeps_locked_language() -> Non
 
 
 @pytest.mark.asyncio
-async def test_help_command_preserves_active_scheme_context_and_language() -> None:
+async def test_help_command_preserves_active_scheme_context_and_language(graph) -> None:
     """The /help guide should not clear the selected scheme or the locked language."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-help-context",
@@ -574,7 +576,7 @@ async def test_help_command_preserves_active_scheme_context_and_language() -> No
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock()
 
     result = await service.handle_message(
@@ -598,9 +600,9 @@ async def test_help_command_preserves_active_scheme_context_and_language() -> No
 
 
 @pytest.mark.asyncio
-async def test_language_callback_re_renders_active_scheme_in_selected_language() -> None:
+async def test_language_callback_re_renders_active_scheme_in_selected_language(graph) -> None:
     """Language callback should preserve the active scheme and rebuild the current view."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-language-callback",
@@ -617,12 +619,12 @@ async def test_language_callback_re_renders_active_scheme_in_selected_language()
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock()
     scheme = _make_scheme("SCH-1", name_hindi="शिक्षा योजना")
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=scheme),
     ):
         result = await service.handle_message(
