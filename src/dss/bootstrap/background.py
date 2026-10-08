@@ -52,12 +52,15 @@ class LocalMemoryWorker:
         self._task = asyncio.create_task(self._run(self.queue), name="ai-background-worker")
         logger.info("Started AI background worker")
 
-    async def stop(self) -> None:
+    async def cancel(self) -> None:
         if self._task is not None:
             self._task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._task
             self._task = None
+
+    async def stop(self) -> None:
+        await self.cancel()
         if self.queue is not None:
             await self.queue.close()
             self.queue = None
