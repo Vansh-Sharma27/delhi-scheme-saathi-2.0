@@ -36,14 +36,16 @@ from typing import Any, NoReturn
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.db.session_store import InMemorySessionStore, get_session_store
+from src.dss.application.ports.session_repository import SessionStore
+from src.dss.bootstrap.logging import configure_logging
+from src.dss.bootstrap.sessions import build_session_store
 from src.dss.domain.conversations.session import Session
+from src.dss.infrastructure.sessions.session_store import InMemorySessionStore
 
 # CHAT_SESSION_PREFIX and the store-selection rule are imported rather than
 # redeclared: they must match the running application exactly, or this script
 # reads the wrong place and reports a session as missing when it is not.
-from src.dss.settings import CHAT_SESSION_PREFIX
-from src.main import _configure_session_store
+from src.dss.settings import CHAT_SESSION_PREFIX, get_settings
 
 IN_MEMORY_HELP = """\
 The configured session store is in-memory, which is per-process: sessions live
@@ -52,7 +54,7 @@ lookup would report 'not found'.
 
 Point it at a real store instead:
   - AWS:   set SESSION_TABLE_NAME (and AWS credentials/AWS_REGION) so the
-           DynamoDB store is selected, as src/main.py:_configure_session_store
+           DynamoDB store is selected, as bootstrap.sessions.build_session_store
            decides it.
   - Local: sessions are not reachable from a separate process at all. Reproduce
            by driving POST /api/chat directly, or run against the deployed
@@ -66,11 +68,14 @@ def _fail(message: str) -> NoReturn:
     raise SystemExit(1)
 
 
-def _require_shared_store() -> None:
+def _require_shared_store() -> SessionStore:
     """Refuse to run against a store that cannot hold the app's sessions."""
-    _configure_session_store()
-    if isinstance(get_session_store(), InMemorySessionStore):
+    settings = get_settings()
+    configure_logging(settings.log_level)
+    store = build_session_store(settings)
+    if isinstance(store, InMemorySessionStore):
         _fail(IN_MEMORY_HELP)
+    return store
 
 
 def _fork_id(label: str) -> str:
@@ -108,9 +113,9 @@ def _summarize(session: Session, include_messages: bool) -> dict[str, Any]:
 
 async def show(user_id: str, include_messages: bool) -> None:
     """Print one session without modifying it."""
-    _require_shared_store()
+    store = _require_shared_store()
 
-    session = await get_session_store().get(user_id)
+    session = await store.get(user_id)
     if session is None:
         _fail(f"No session found for user_id={user_id!r}")
 
@@ -119,9 +124,7 @@ async def show(user_id: str, include_messages: bool) -> None:
 
 async def fork(source_user_id: str, label: str, force: bool) -> None:
     """Copy a session into the /api/chat keyspace for safe replay."""
-    _require_shared_store()
-
-    store = get_session_store()
+    store = _require_shared_store()
     source = await store.get(source_user_id)
     if source is None:
         _fail(f"No session found for user_id={source_user_id!r}")

@@ -18,6 +18,7 @@ from src.dss.application.ports.office_repository import OfficeRepository
 from src.dss.application.ports.rejection_rule_repository import RejectionRuleRepository
 from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.bootstrap.logging import configure_logging
+from src.dss.bootstrap.sessions import build_session_store
 from src.dss.infrastructure.database.adapters import (
     PostgresDocumentRepository,
     PostgresOfficeRepository,
@@ -104,38 +105,10 @@ async def lifespan(app: FastAPI):
 
 
 def _configure_session_store() -> None:
-    """Configure session store based on environment.
+    """Temporary installation for legacy consumers until runtime migration."""
+    from src.db.session_store import configure_session_store
 
-    Uses DynamoDB when SESSION_TABLE_NAME is set (production/Lambda),
-    otherwise uses in-memory store (local development).
-    """
-    from src.db.session_store import (
-        DynamoDBSessionStore,
-        InMemorySessionStore,
-        configure_session_store,
-    )
-
-    settings = get_settings()
-
-    # Use DynamoDB when running in production (USE_BEDROCK=true or non-default table name)
-    if settings.session_table_name and (
-        settings.use_bedrock or settings.session_table_name != "dss-sessions"
-    ):
-        # DynamoDB configured (production)
-        try:
-            store = DynamoDBSessionStore(
-                table_name=settings.session_table_name,
-                region=settings.aws_region,
-            )
-            configure_session_store(store)
-            logger.info("Session store: DynamoDB (%s)", settings.session_table_name)
-        except Exception as e:
-            logger.warning("DynamoDB init failed, using in-memory: %s", e)
-            configure_session_store(InMemorySessionStore())
-    else:
-        # Local development - use in-memory store
-        configure_session_store(InMemorySessionStore())
-        logger.info("Session store: In-memory (local development)")
+    configure_session_store(build_session_store(get_settings()))
 
 
 async def _configure_ai_background_runtime() -> None:
