@@ -73,7 +73,8 @@ name = "Conversation package one-way dependency order (ADR-0004)"
 type = "layers"
 layers = [
     "src.services.conversation.service",
-    "src.services.conversation.views",
+    "src.services.conversation.views | src.dss.application.conversation.views",
+    "src.dss.application.conversation.view_formatting",
     "src.dss.application.conversation.turn_policy",
     "src.dss.application.conversation.intents",
     "src.dss.application.conversation.scheme_reference",
