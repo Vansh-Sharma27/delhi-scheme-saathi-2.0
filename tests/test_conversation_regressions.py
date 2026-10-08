@@ -1433,10 +1433,10 @@ async def test_spouse_conflict_in_llm_reply_falls_back_to_deterministic_question
 
 
 @pytest.mark.asyncio
-async def test_guardian_context_does_not_overinfer_married_for_child_beneficiary() -> None:
+async def test_guardian_context_does_not_overinfer_married_for_child_beneficiary(graph) -> None:
     """Guardian wording should not create a married applicant profile by default."""
-    store = get_session_store()
-    service = ConversationService(db_pool=AsyncMock())
+    store = graph.store
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1471,9 +1471,9 @@ async def test_guardian_context_does_not_overinfer_married_for_child_beneficiary
 
 
 @pytest.mark.asyncio
-async def test_no_match_topic_switch_updates_life_event_and_reruns_matching() -> None:
+async def test_no_match_topic_switch_updates_life_event_and_reruns_matching(graph) -> None:
     """A new topic should replace the stored life event and retry matching."""
-    store = get_session_store()
+    store = graph.store
     seed = Session(
         user_id="user-topic",
         state=ConversationState.PROFILE_COLLECTION,
@@ -1488,7 +1488,7 @@ async def test_no_match_topic_switch_updates_life_event_and_reruns_matching() ->
     )
     await store.save(seed)
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1502,7 +1502,7 @@ async def test_no_match_topic_switch_updates_life_event_and_reruns_matching() ->
     )
     match_schemes = AsyncMock(return_value=[])
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-topic", message="Now I need housing help instead")
         )
@@ -1518,9 +1518,9 @@ async def test_no_match_topic_switch_updates_life_event_and_reruns_matching() ->
 
 
 @pytest.mark.asyncio
-async def test_ai_relevance_gate_clarifies_cross_domain_candidate() -> None:
+async def test_ai_relevance_gate_clarifies_cross_domain_candidate(graph) -> None:
     """Low-confidence cross-domain results should trigger a clarification instead of presentation."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-ai-gate",
@@ -1535,7 +1535,7 @@ async def test_ai_relevance_gate_clarifies_cross_domain_candidate() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1572,7 +1572,7 @@ async def test_ai_relevance_gate_clarifies_cross_domain_candidate() -> None:
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-ai-gate", message="show me the schemes")
         )
@@ -1586,9 +1586,9 @@ async def test_ai_relevance_gate_clarifies_cross_domain_candidate() -> None:
 
 
 @pytest.mark.asyncio
-async def test_relevance_judge_uses_active_need_summary_not_raw_income_reply() -> None:
+async def test_relevance_judge_uses_active_need_summary_not_raw_income_reply(graph) -> None:
     """AI relevance judging should see the active goal, not only the bare field answer."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-active-need-summary",
@@ -1607,7 +1607,7 @@ async def test_relevance_judge_uses_active_need_summary_not_raw_income_reply() -
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1650,10 +1650,7 @@ async def test_relevance_judge_uses_active_need_summary_not_raw_income_reply() -
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.service.format_inline_keyboard",
-        return_value=[[{"text": "Widow Pension", "callback_data": "scheme:SCH-WIDOW"}]],
-    ):
+    with patch.object(service, "match_schemes", match_schemes):
         await service.handle_message(
             ChatRequest(user_id="user-active-need-summary", message="50K INR")
         )
@@ -1666,9 +1663,9 @@ async def test_relevance_judge_uses_active_need_summary_not_raw_income_reply() -
 
 
 @pytest.mark.asyncio
-async def test_clear_deterministic_match_skips_ai_relevance_judge() -> None:
+async def test_clear_deterministic_match_skips_ai_relevance_judge(graph) -> None:
     """High-confidence deterministic ranking should avoid an unnecessary AI judge call."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-skip-ai-judge",
@@ -1682,7 +1679,7 @@ async def test_clear_deterministic_match_skips_ai_relevance_judge() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1710,10 +1707,7 @@ async def test_clear_deterministic_match_skips_ai_relevance_judge() -> None:
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.service.format_inline_keyboard",
-        return_value=[[{"text": "Strong Housing Match", "callback_data": "scheme:SCH-HIGH"}]],
-    ):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-skip-ai-judge", message="show me housing schemes")
         )
@@ -1724,9 +1718,9 @@ async def test_clear_deterministic_match_skips_ai_relevance_judge() -> None:
 
 
 @pytest.mark.asyncio
-async def test_followup_about_secondary_scheme_resolves_in_live_conversation() -> None:
+async def test_followup_about_secondary_scheme_resolves_in_live_conversation(graph) -> None:
     """Natural follow-ups about a secondary presented scheme should not fall back to the selected one."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-secondary-scheme",
@@ -1754,7 +1748,7 @@ async def test_followup_about_secondary_scheme_resolves_in_live_conversation() -
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1773,8 +1767,8 @@ async def test_followup_about_secondary_scheme_resolves_in_live_conversation() -
         name="Education Loan Scheme - Delhi",
         name_hindi="शिक्षा ऋण योजना - दिल्ली",
     )
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=education_scheme),
     ):
         result = await service.handle_message(
@@ -1791,9 +1785,9 @@ async def test_followup_about_secondary_scheme_resolves_in_live_conversation() -
 
 
 @pytest.mark.asyncio
-async def test_scheme_term_question_gets_direct_answer_instead_of_card_replay() -> None:
+async def test_scheme_term_question_gets_direct_answer_instead_of_card_replay(graph) -> None:
     """Scheme-term follow-ups should be answered directly, not by replaying details."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-income-band",
@@ -1808,7 +1802,7 @@ async def test_scheme_term_question_gets_direct_answer_instead_of_card_replay() 
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1828,8 +1822,8 @@ async def test_scheme_term_question_gets_direct_answer_instead_of_card_replay() 
         income_by_category={"EWS": 300000, "LIG": 600000, "MIG": 900000},
         categories=["EWS", "LIG", "MIG"],
     )
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=pmay_scheme),
     ):
         result = await service.handle_message(
@@ -1846,9 +1840,9 @@ async def test_scheme_term_question_gets_direct_answer_instead_of_card_replay() 
 
 
 @pytest.mark.asyncio
-async def test_justify_question_uses_scheme_answer_path() -> None:
+async def test_justify_question_uses_scheme_answer_path(graph) -> None:
     """Why-this-scheme questions should use the grounded answer path, not the static details card."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-justify-answer",
@@ -1865,7 +1859,7 @@ async def test_justify_question_uses_scheme_answer_path() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1878,11 +1872,11 @@ async def test_justify_question_uses_scheme_answer_path() -> None:
         }
     )
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=_make_scheme("SCH-DELHI-003", life_event="DEATH_IN_FAMILY", genders=["female"], categories=["all"])),
-    ), patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    ), patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(return_value="I suggested this because you said you are widowed and your income is below ₹1 lakh."),
     ) as answer_mock:
         result = await service.handle_message(
@@ -1897,9 +1891,9 @@ async def test_justify_question_uses_scheme_answer_path() -> None:
 
 
 @pytest.mark.asyncio
-async def test_language_switch_justify_question_still_uses_scheme_answer_path() -> None:
+async def test_language_switch_justify_question_still_uses_scheme_answer_path(graph) -> None:
     """Explicit language requests should not block scheme Q&A routing."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-language-justify-answer",
@@ -1914,7 +1908,7 @@ async def test_language_switch_justify_question_still_uses_scheme_answer_path() 
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1927,11 +1921,11 @@ async def test_language_switch_justify_question_still_uses_scheme_answer_path() 
         }
     )
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=_make_scheme("SCH-DELHI-001", life_event="HOUSING")),
-    ), patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    ), patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(return_value="I suggested this because your housing need and income fit the scheme rules."),
     ) as answer_mock:
         result = await service.handle_message(
@@ -1950,9 +1944,9 @@ async def test_language_switch_justify_question_still_uses_scheme_answer_path() 
 
 
 @pytest.mark.asyncio
-async def test_language_switch_translation_request_uses_scheme_answer_path() -> None:
+async def test_language_switch_translation_request_uses_scheme_answer_path(graph) -> None:
     """Translate-this-detail follow-ups should not fall back to the static card."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-translate-scheme-answer",
@@ -1976,7 +1970,7 @@ async def test_language_switch_translation_request_uses_scheme_answer_path() -> 
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -1989,11 +1983,11 @@ async def test_language_switch_translation_request_uses_scheme_answer_path() -> 
         }
     )
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=_make_scheme("SCH-DELHI-001", life_event="HOUSING")),
-    ), patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    ), patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(return_value="इस योजना में आय वर्ग का मतलब वार्षिक पारिवारिक आय का समूह है।"),
     ) as answer_mock:
         result = await service.handle_message(
@@ -2008,9 +2002,9 @@ async def test_language_switch_translation_request_uses_scheme_answer_path() -> 
 
 
 @pytest.mark.asyncio
-async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_path() -> None:
+async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_path(graph) -> None:
     """Scheme-context eligibility questions should not get overridden by rematching."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-scheme-eligibility-followup",
@@ -2026,7 +2020,7 @@ async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_p
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2040,8 +2034,8 @@ async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_p
     )
     match_schemes = AsyncMock()
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(
             return_value=_make_scheme(
                 "SCH-DELHI-003",
@@ -2051,11 +2045,11 @@ async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_p
                 categories=["all"],
             )
         ),
-    ), patch(
-        "src.services.conversation.service.scheme_matcher.match_schemes",
+    ), patch.object(
+        service, "match_schemes",
         match_schemes,
-    ), patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    ), patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(
             return_value=(
                 "General category does not disqualify her for this scheme. "
@@ -2084,9 +2078,9 @@ async def test_scheme_eligibility_question_with_profile_update_stays_on_answer_p
 
 
 @pytest.mark.asyncio
-async def test_low_context_field_answer_skips_relevance_clarification_loop() -> None:
+async def test_low_context_field_answer_skips_relevance_clarification_loop(graph) -> None:
     """A parsed field reply should present deterministic matches instead of re-confirming the topic."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-income-loop",
@@ -2103,7 +2097,7 @@ async def test_low_context_field_answer_skips_relevance_clarification_loop() -> 
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2133,10 +2127,7 @@ async def test_low_context_field_answer_skips_relevance_clarification_loop() -> 
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes), patch(
-        "src.services.conversation.service.format_inline_keyboard",
-        return_value=[[{"text": "Housing Relief Scheme", "callback_data": "scheme:SCH-HOUSE"}]],
-    ):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(user_id="user-income-loop", message="Roughly 5 lakhs")
         )
@@ -2151,9 +2142,9 @@ async def test_low_context_field_answer_skips_relevance_clarification_loop() -> 
 
 
 @pytest.mark.asyncio
-async def test_unlocked_hinglish_field_style_reply_preserves_language_for_matching() -> None:
+async def test_unlocked_hinglish_field_style_reply_preserves_language_for_matching(graph) -> None:
     """Longer field-style replies should keep unlocked Hinglish sessions stable."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-hinglish-field-style",
@@ -2178,7 +2169,7 @@ async def test_unlocked_hinglish_field_style_reply_preserves_language_for_matchi
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2211,7 +2202,7 @@ async def test_unlocked_hinglish_field_style_reply_preserves_language_for_matchi
         ]
     )
 
-    with patch("src.services.conversation.service.scheme_matcher.match_schemes", match_schemes):
+    with patch.object(service, "match_schemes", match_schemes):
         result = await service.handle_message(
             ChatRequest(
                 user_id="user-hinglish-field-style",
@@ -2392,9 +2383,9 @@ def test_truncate_at_sentence_handles_hindi_danda() -> None:
 
 
 @pytest.mark.asyncio
-async def test_application_request_uses_step_by_step_guidance_when_steps_exist() -> None:
+async def test_application_request_uses_step_by_step_guidance_when_steps_exist(graph) -> None:
     """Application-step asks should use `scheme.application_steps`, not only the offline summary."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-application-steps",
@@ -2409,7 +2400,7 @@ async def test_application_request_uses_step_by_step_guidance_when_steps_exist()
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2438,8 +2429,8 @@ async def test_application_request_uses_step_by_step_guidance_when_steps_exist()
         }
     )
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=scheme),
     ):
         result = await service.handle_message(
@@ -2453,9 +2444,9 @@ async def test_application_request_uses_step_by_step_guidance_when_steps_exist()
 
 
 @pytest.mark.asyncio
-async def test_application_help_followup_question_stays_on_answer_path() -> None:
+async def test_application_help_followup_question_stays_on_answer_path(graph) -> None:
     """Question-shaped application follow-ups should not replay the same application card."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-application-loop",
@@ -2470,7 +2461,7 @@ async def test_application_help_followup_question_stays_on_answer_path() -> None
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2499,11 +2490,11 @@ async def test_application_help_followup_question_stays_on_answer_path() -> None
         }
     )
 
-    with patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    with patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(return_value=scheme),
-    ), patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    ), patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(return_value="The first step is to collect the DAK application form."),
     ) as answer_mock:
         result = await service.handle_message(
@@ -2519,9 +2510,9 @@ async def test_application_help_followup_question_stays_on_answer_path() -> None
 
 
 @pytest.mark.asyncio
-async def test_procedure_request_routes_to_application_help() -> None:
+async def test_procedure_request_routes_to_application_help(graph) -> None:
     """Procedure/process wording should enter application help deterministically."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-procedure-route",
@@ -2538,7 +2529,7 @@ async def test_procedure_request_routes_to_application_help() -> None:
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2551,11 +2542,11 @@ async def test_procedure_request_routes_to_application_help() -> None:
         }
     )
 
-    with patch(
-        "src.services.conversation.views.build_application_help_text",
+    with patch.object(
+        service.views, "build_application_help_text",
         AsyncMock(return_value="📝 How to Apply for Scheme SCH-5:\n\nStep 1: Submit the form."),
-    ), patch(
-        "src.services.conversation.views.build_scheme_details_text",
+    ), patch.object(
+        service.views, "build_scheme_details_text",
         AsyncMock(return_value="Scheme details"),
     ):
         result = await service.handle_message(
@@ -2567,9 +2558,9 @@ async def test_procedure_request_routes_to_application_help() -> None:
 
 
 @pytest.mark.asyncio
-async def test_rgsry_application_followup_ignores_echoed_active_scheme_selection() -> None:
+async def test_rgsry_application_followup_ignores_echoed_active_scheme_selection(graph) -> None:
     """Echoed same-scheme selections must not replay RGSRY scheme details."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-rgsry-echoed-selection",
@@ -2593,7 +2584,7 @@ async def test_rgsry_application_followup_ignores_echoed_active_scheme_selection
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2606,11 +2597,11 @@ async def test_rgsry_application_followup_ignores_echoed_active_scheme_selection
         }
     )
 
-    with patch(
-        "src.services.conversation.views.build_application_help_text",
+    with patch.object(
+        service.views, "build_application_help_text",
         AsyncMock(return_value="APP HELP"),
-    ) as application_mock, patch(
-        "src.services.conversation.views.build_scheme_details_text",
+    ) as application_mock, patch.object(
+        service.views, "build_scheme_details_text",
         AsyncMock(return_value="DETAILS"),
     ) as details_mock:
         result = await service.handle_message(
@@ -2627,9 +2618,9 @@ async def test_rgsry_application_followup_ignores_echoed_active_scheme_selection
 
 
 @pytest.mark.asyncio
-async def test_locked_english_scheme_followup_rewrites_hindi_application_reply() -> None:
+async def test_locked_english_scheme_followup_rewrites_hindi_application_reply(graph) -> None:
     """Locked English sessions should rewrite stray Hindi scheme follow-up replies."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-english-scheme-rewrite",
@@ -2646,7 +2637,7 @@ async def test_locked_english_scheme_followup_rewrites_hindi_application_reply()
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2666,17 +2657,16 @@ async def test_locked_english_scheme_followup_rewrites_hindi_application_reply()
         )
     )
 
-    with patch(
-        "src.services.conversation.views.build_application_help_text",
+    with patch.object(
+        service.views, "build_application_help_text",
         AsyncMock(
             return_value=(
                 "📝 योजना के लिए आवेदन:\n\n"
                 "चरण 1: आवेदन पत्र जमा करें।"
             )
         ),
-    ), patch(
-        "src.services.response_generator.get_ai_orchestrator",
-        return_value=mock_ai,
+    ), patch.object(
+        service.responses, "ai", mock_ai,
     ):
         result = await service.handle_message(
             ChatRequest(
@@ -2692,9 +2682,9 @@ async def test_locked_english_scheme_followup_rewrites_hindi_application_reply()
 
 
 @pytest.mark.asyncio
-async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path() -> None:
+async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path(graph) -> None:
     """Same-scheme question follow-ups should still use the answer path."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id="user-rgsry-question-echo",
@@ -2718,7 +2708,7 @@ async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path()
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2731,11 +2721,11 @@ async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path()
         }
     )
 
-    with patch(
-        "src.services.conversation.views.response_generator.generate_scheme_question_response",
+    with patch.object(
+        service.responses, "generate_scheme_question_response",
         AsyncMock(return_value="The first step is to complete Part A."),
-    ) as answer_mock, patch(
-        "src.services.conversation.views.scheme_repo.get_scheme_by_id",
+    ) as answer_mock, patch.object(
+        service.schemes, "get_scheme_by_id",
         AsyncMock(
             return_value=_make_scheme(
                 "SCH-DELHI-005",
@@ -2744,8 +2734,8 @@ async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path()
                 name_hindi="राजीव गांधी स्वावलंबन रोज़गार योजना (आरजीएसआरवाई)",
             )
         ),
-    ), patch(
-        "src.services.conversation.views.build_application_help_text",
+    ), patch.object(
+        service.views, "build_application_help_text",
         AsyncMock(return_value="APP HELP"),
     ) as application_mock:
         result = await service.handle_message(
@@ -2792,6 +2782,7 @@ async def test_same_scheme_question_with_echoed_selection_stays_on_answer_path()
     ids=[seed["id"] for seed in ACTIVE_SCHEME_SEEDS],
 )
 async def test_same_scheme_followup_routing_works_for_every_active_scheme(
+    graph,
     scheme_seed: dict[str, str],
     followup_text: str,
     expected_state: ConversationState,
@@ -2799,7 +2790,7 @@ async def test_same_scheme_followup_routing_works_for_every_active_scheme(
     sentinel: str,
 ) -> None:
     """Every active scheme should honor explicit subview asks despite echoed selection ids."""
-    store = get_session_store()
+    store = graph.store
     await store.save(
         Session(
             user_id=f"user-{scheme_seed['id']}-{expected_state.value}",
@@ -2817,7 +2808,7 @@ async def test_same_scheme_followup_routing_works_for_every_active_scheme(
         )
     )
 
-    service = ConversationService(db_pool=AsyncMock())
+    service = graph
     service.llm.analyze_message = AsyncMock(
         return_value={
             "intent": "question",
@@ -2837,17 +2828,17 @@ async def test_same_scheme_followup_routing_works_for_every_active_scheme(
         "_build_scheme_details_text": AsyncMock(return_value="DETAILS"),
     }
 
-    with patch(
-        "src.services.conversation.views.build_document_guidance_text",
+    with patch.object(
+        service.views, "build_document_guidance_text",
         patch_targets["_build_document_guidance_text"],
-    ), patch(
-        "src.services.conversation.views.build_rejection_warnings_text",
+    ), patch.object(
+        service.views, "build_rejection_warnings_text",
         patch_targets["_build_rejection_warnings_text"],
-    ), patch(
-        "src.services.conversation.views.build_application_help_text",
+    ), patch.object(
+        service.views, "build_application_help_text",
         patch_targets["_build_application_help_text"],
-    ), patch(
-        "src.services.conversation.views.build_scheme_details_text",
+    ), patch.object(
+        service.views, "build_scheme_details_text",
         patch_targets["_build_scheme_details_text"],
     ):
         result = await service.handle_message(
