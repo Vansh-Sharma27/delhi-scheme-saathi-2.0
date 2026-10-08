@@ -1,5 +1,8 @@
-"""Port-driven matching agrees with the independently retained legacy path."""
+"""Port-driven matching agrees with a frozen, independent historical matcher."""
 
+import subprocess
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,11 +13,23 @@ from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.domain.profiles.profile import UserProfile
 from src.dss.domain.schemes.scheme import EligibilityCriteria, Scheme, SchemeCandidate
 from src.dss.infrastructure.embeddings.fallback_client import EMBEDDING_DIM
-from src.services import scheme_matcher as legacy
+
+
+@pytest.fixture
+def legacy() -> ModuleType:
+    # Pin the oracle independently of both the working tree and future HEADs.
+    source_ref = "9e2ffa377b5a788fa2ad649b8fc53b90cbeb2506:src/services/scheme_matcher.py"
+    source = subprocess.check_output(
+        ["git", "show", source_ref], cwd=Path(__file__).resolve().parents[1],
+        encoding="utf-8",
+    )
+    module = ModuleType("historical_scheme_matcher")
+    exec(compile(source, source_ref, "exec"), module.__dict__)
+    return module
 
 
 @pytest.mark.parametrize("embedding", [None, [0.2], [0.2] * EMBEDDING_DIM])
-async def test_constructed_matcher_matches_existing_pipeline(monkeypatch, embedding) -> None:
+async def test_constructed_matcher_matches_existing_pipeline(monkeypatch, embedding, legacy) -> None:
     candidates = [SchemeCandidate(scheme=Scheme(
         id=sid, name=sid, name_hindi=sid, department="synthetic", department_hindi="synthetic",
         level="state", description="synthetic", description_hindi="synthetic",
@@ -30,6 +45,8 @@ async def test_constructed_matcher_matches_existing_pipeline(monkeypatch, embedd
     embeddings = AsyncMock(spec=EmbeddingProvider)
     embeddings.get_embedding.return_value = embedding
     matcher = SchemeMatcher(repository, embeddings, lambda sid: [], embedding_dimension=EMBEDDING_DIM)
+    assert legacy.match_schemes.__code__ is not SchemeMatcher.match_schemes.__code__
+    assert legacy.match_schemes.__module__ == "historical_scheme_matcher"
     profile = UserProfile(gender="male", life_event="HOUSING")
     monkeypatch.setattr(legacy, "get_embedding_client", lambda: embeddings)
     monkeypatch.setattr(legacy, "retrieve_candidates", AsyncMock(return_value=candidates))

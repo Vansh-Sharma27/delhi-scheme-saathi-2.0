@@ -1,9 +1,12 @@
 """Tests for LLM and embedding fallback behavior."""
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 
+from src.dss.application.matching.scheme_matcher import SchemeMatcher
+from src.dss.application.ports.scheme_repository import SchemeRepository
 from src.dss.infrastructure.ai import (
     bedrock_client,
     grok_client,
@@ -16,7 +19,6 @@ from src.dss.settings import get_settings
 from src.integrations import embedding_client, llm_client
 from src.models.session import UserProfile
 from src.prompts.loader import get_analysis_system_prompt, get_system_prompt
-from src.services import scheme_matcher
 
 
 @pytest.fixture(autouse=True)
@@ -233,9 +235,7 @@ async def test_embedding_none_when_all_providers_fail(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
-async def test_matcher_skips_vector_ranking_on_failed_embedding(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_matcher_skips_vector_ranking_on_failed_embedding() -> None:
     """Scheme matcher should pass None embedding to DB layer when providers fail."""
 
     class FailedEmbeddingClient:
@@ -248,12 +248,15 @@ async def test_matcher_skips_vector_ranking_on_failed_embedding(
         captured["query_embedding"] = query_embedding
         return []
 
-    monkeypatch.setattr(scheme_matcher, "get_embedding_client", lambda: FailedEmbeddingClient())
-    monkeypatch.setattr(scheme_matcher, "retrieve_candidates", fake_hybrid_search)
+    repository = AsyncMock(spec=SchemeRepository)
+    repository.retrieve_candidates.side_effect = fake_hybrid_search
+    matcher = SchemeMatcher(
+        repository, FailedEmbeddingClient(), lambda sid: [],
+        embedding_dimension=fallback_client.EMBEDDING_DIM,
+    )
 
     profile = UserProfile(life_event="HOUSING")
-    matches = await scheme_matcher.match_schemes(
-        pool=object(),  # type: ignore[arg-type]
+    matches = await matcher.match_schemes(
         profile=profile,
         query_text="मुझे घर चाहिए",
     )
