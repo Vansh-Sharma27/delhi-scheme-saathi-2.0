@@ -2,7 +2,6 @@
 
 import sys
 
-from src.dss.application.conversation import language
 from src.dss.application.ports.speech import SpeechProvider
 from src.dss.infrastructure.speech.bhashini import get_bhashini_client
 from src.dss.infrastructure.speech.sarvam import get_sarvam_client
@@ -16,7 +15,6 @@ _implementation.get_settings = get_settings
 _implementation.get_telegram_client = get_telegram_client
 _implementation.ConversationService = ConversationService
 _implementation.session_manager = session_manager
-_implementation.language = language
 _implementation.get_bhashini_client = get_bhashini_client
 _implementation.get_sarvam_client = get_sarvam_client
 

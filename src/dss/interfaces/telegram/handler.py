@@ -15,6 +15,7 @@ from typing import Any
 
 import asyncpg
 
+from src.dss.application.conversation import language
 from src.dss.application.conversation.contracts import ChatRequest, TelegramUpdate
 from src.dss.application.ports.notifier import Notifier
 from src.dss.application.ports.speech import SpeechProvider
@@ -31,7 +32,6 @@ get_settings: Callable[[], Any] = _unconfigured
 get_telegram_client: Callable[[], Notifier] = _unconfigured
 ConversationService: Callable[[asyncpg.Pool], Any] = _unconfigured
 session_manager: Any = None
-language: Any = None
 get_sarvam_client: Callable[[], SpeechProvider] = _unconfigured
 get_bhashini_client: Callable[[], SpeechProvider] = _unconfigured
 _get_voice_client: Callable[[], SpeechProvider] = _unconfigured
